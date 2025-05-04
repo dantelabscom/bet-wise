@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# JINZO - Sports Trading Platform
 
-## Getting Started
+A modern sports trading platform that allows users to buy and sell positions on sports outcomes. Built with Next.js, Firebase Authentication, PostgreSQL, and Rust.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- User authentication with Firebase
+- Market creation and browsing
+- Order book for matching trades
+- Wallet management
+- Real-time updates
+- Mobile-responsive design
+
+## Tech Stack
+
+- **Frontend:** Next.js, React, TailwindCSS
+- **Authentication:** Firebase Auth, NextAuth.js
+- **Database:** PostgreSQL, Drizzle ORM
+- **Backend:** Rust (API services)
+
+## Setup Instructions
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- PostgreSQL database
+- Firebase account
+- Rust toolchain (for backend services)
+
+### Environment Variables
+
+Create a `.env.local` file in the root directory with the following variables:
+
+```
+# Firebase Configuration
+NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-storage-bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+
+# Database
+DATABASE_URL=postgres://username:password@localhost:5432/dbname
+
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-random-secret-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Set up your environment variables as described above
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
+5. Visit http://localhost:3000 in your browser
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Database Setup
 
-## Learn More
+1. Create a PostgreSQL database
+2. Set the `DATABASE_URL` in your `.env.local` file
+3. Apply database migrations (to be implemented)
 
-To learn more about Next.js, take a look at the following resources:
+## Development Roadmap
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Phase 1: Foundation (Current)
+- User authentication
+- Basic UI design
+- Market creation
+- Simple order book
+- Wallet functionality
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Phase 2: Trading Experience
+- Advanced market types
+- Odds calculation engine
+- Order matching system
+- Position management
+- Risk management
 
-## Deploy on Vercel
+### Phase 3: Enhanced Features
+- Live data integration
+- Social features
+- Analytics dashboard
+- Notifications system
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Phase 4: Polish & Scale
+- Advanced risk management
+- Expanded market coverage
+- Administrative tools
+- Marketing preparations
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+[MIT](LICENSE)
+
+## Contact
+
+For questions or support, please open an issue on this repository.
