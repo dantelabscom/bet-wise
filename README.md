@@ -1,4 +1,4 @@
-# JINZO - Sports Trading Platform
+# BetWise - A smarter way to Bet
 
 A modern sports trading platform that allows users to buy and sell positions on sports outcomes. Built with Next.js, Firebase Authentication, PostgreSQL, and Rust.
 

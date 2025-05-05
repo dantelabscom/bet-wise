@@ -8,8 +8,8 @@ import AuthSessionProvider from "@/providers/auth-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Jinzo - Sports Trading Platform",
-  description: "Trade on sports markets like a pro",
+  title: "BetWise - A Smarter Way to Bet.",
+  description: "A Smarter Way to Bet",
 };
 
 export default function RootLayout({

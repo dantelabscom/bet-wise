@@ -1,452 +1,559 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import DashboardHeader from '@/components/dashboard/Header';
 import toast from 'react-hot-toast';
+import DashboardHeader from '@/components/dashboard/Header';
+import OrderBook from '@/components/markets/OrderBook';
+import OrderForm from '@/components/markets/OrderForm';
+import { Market, MarketOption } from '@/lib/models/market';
+import { Order } from '@/lib/models/order';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer, 
+  AreaChart, Area, BarChart, Bar
+} from 'recharts';
 
-interface MarketOption {
-  id: number;
-  name: string;
-  currentPrice: string;
+// Chart time range options
+const TIME_RANGES = [
+  { label: '1H', value: '1h' },
+  { label: '6H', value: '6h' },
+  { label: '1D', value: '1d' },
+  { label: '1W', value: '1w' },
+  { label: '1M', value: '1m' },
+  { label: 'ALL', value: 'all' },
+];
+
+// Chart types
+type ChartType = 'line' | 'area' | 'candle' | 'bar';
+
+interface PriceDataPoint {
+  time: string;
+  price: number;
+  volume?: number;
+  timestamp: number;
 }
 
-interface Market {
-  id: number;
-  name: string;
-  status: string;
-  event: {
-    name: string;
-  };
-  sport: {
-    name: string;
-  };
-  options: MarketOption[];
-}
-
-interface TradePageProps {
-  params: {
-    id: string;
-  };
-}
-
-export default function TradePage({ params }: TradePageProps) {
-  const marketId = params.id;
-  const searchParams = useSearchParams();
-  const optionId = searchParams.get('option');
-  
-  const { data: session, status } = useSession();
+export default function AdvancedTradePage() {
+  const params = useParams();
   const router = useRouter();
-  
+  const { data: session, status } = useSession();
   const [market, setMarket] = useState<Market | null>(null);
-  const [option, setOption] = useState<MarketOption | null>(null);
+  const [selectedOption, setSelectedOption] = useState<MarketOption | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [priceData, setPriceData] = useState<PriceDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [orderSide, setOrderSide] = useState<'buy' | 'sell'>('buy');
-  const [orderType, setOrderType] = useState<'market' | 'limit'>('limit');
-  const [price, setPrice] = useState('');
-  const [quantity, setQuantity] = useState('1');
-  const [total, setTotal] = useState(0);
-  const [placingOrder, setPlacingOrder] = useState(false);
-  const [walletBalance, setWalletBalance] = useState('1000.00');
-
+  const [timeRange, setTimeRange] = useState('1d');
+  const [chartType, setChartType] = useState<ChartType>('area');
+  const [riskAmount, setRiskAmount] = useState('10.00');
+  const [positionSize, setPositionSize] = useState(0);
+  const [stopPrice, setStopPrice] = useState('');
+  
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+  
   // Redirect if not authenticated
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/login');
     }
   }, [status, router]);
-
-  // Fetch market and option data
+  
+  // Fetch market data
   useEffect(() => {
-    const fetchData = async () => {
-      if (status === 'authenticated') {
-        try {
-          // In a real implementation, we would fetch from the API
-          // const marketResponse = await fetch(`/api/markets/${marketId}`);
-          // const marketData = await marketResponse.json();
-          
-          // Mock data
-          const mockMarket: Market = {
-            id: Number(marketId),
-            name: 'Super Bowl Winner 2025',
-            status: 'open',
-            event: {
-              name: 'Super Bowl LIX',
-            },
-            sport: {
-              name: 'Football',
-            },
-            options: [
-              { id: 1, name: 'Kansas City Chiefs', currentPrice: '5.50' },
-              { id: 2, name: 'San Francisco 49ers', currentPrice: '6.20' },
-              { id: 3, name: 'Buffalo Bills', currentPrice: '9.00' },
-              { id: 4, name: 'Baltimore Ravens', currentPrice: '10.00' },
-              { id: 5, name: 'Detroit Lions', currentPrice: '12.00' },
-              { id: 6, name: 'Dallas Cowboys', currentPrice: '15.00' },
-            ],
-          };
-          
-          setMarket(mockMarket);
-          
-          // Find the selected option
-          const selectedOption = mockMarket.options.find(
-            opt => opt.id === Number(optionId)
-          );
-          
-          if (!selectedOption) {
-            throw new Error('Option not found');
-          }
-          
-          setOption(selectedOption);
-          setPrice(selectedOption.currentPrice);
-          
-          // Fetch wallet balance
-          // const walletResponse = await fetch('/api/wallet');
-          // const walletData = await walletResponse.json();
-          // setWalletBalance(walletData.balance);
-          
-        } catch (error) {
-          console.error('Error fetching data:', error);
-          toast.error('Failed to load trading data');
-          router.push(`/markets/${marketId}`);
-        } finally {
-          setLoading(false);
+    const fetchMarket = async () => {
+      if (!params.id) return;
+      
+      try {
+        const response = await fetch(`/api/markets/${params.id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch market');
         }
+        
+        const data = await response.json();
+        setMarket(data);
+        
+        // Set the first option as selected by default
+        if (data.options && data.options.length > 0) {
+          setSelectedOption(data.options[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching market:', error);
+        toast.error('Failed to load market data');
+      } finally {
+        setLoading(false);
       }
     };
-
-    fetchData();
-  }, [status, marketId, optionId, router]);
-
-  // Calculate total cost/proceeds
+    
+    fetchMarket();
+  }, [params.id]);
+  
+  // Fetch user's open orders for this market
   useEffect(() => {
-    if (price && quantity) {
-      const calculatedTotal = parseFloat(price) * parseFloat(quantity);
-      setTotal(calculatedTotal);
-    } else {
-      setTotal(0);
-    }
-  }, [price, quantity]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    const fetchOrders = async () => {
+      if (!params.id || status !== 'authenticated') return;
+      
+      try {
+        const response = await fetch(`/api/orders?marketId=${params.id}&status=open`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch orders');
+        }
+        
+        const data = await response.json();
+        setOrders(data.orders || []);
+      } catch (error) {
+        console.error('Error fetching orders:', error);
+      }
+    };
     
-    if (!option || !price || !quantity) {
-      toast.error('Please fill in all fields');
+    fetchOrders();
+  }, [params.id, status]);
+  
+  // Generate mock price data for the selected option
+  useEffect(() => {
+    if (!selectedOption) return;
+    
+    const now = new Date().getTime();
+    let timeStep = 3600000; // 1 hour in ms
+    let dataPoints = 24;
+    
+    switch (timeRange) {
+      case '1h':
+        timeStep = 60000; // 1 minute
+        dataPoints = 60;
+        break;
+      case '6h':
+        timeStep = 360000; // 6 minutes
+        dataPoints = 60;
+        break;
+      case '1d':
+        timeStep = 3600000; // 1 hour
+        dataPoints = 24;
+        break;
+      case '1w':
+        timeStep = 86400000 / 4; // 6 hours
+        dataPoints = 28;
+        break;
+      case '1m':
+        timeStep = 86400000; // 1 day
+        dataPoints = 30;
+        break;
+      case 'all':
+        timeStep = 86400000; // 1 day
+        dataPoints = 60;
+        break;
+    }
+    
+    const basePrice = parseFloat(selectedOption.currentPrice);
+    const volatility = 0.05; // 5% volatility for mock data
+    
+    const mockData: PriceDataPoint[] = Array.from({ length: dataPoints }, (_, i) => {
+      // Generate a pseudo-random walk around the base price
+      const timestamp = now - (dataPoints - i) * timeStep;
+      const date = new Date(timestamp);
+      const time = timeRange === '1h' || timeRange === '6h'
+        ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      
+      // Random walk with mean reversion
+      const randomChange = (Math.random() - 0.5) * volatility * basePrice;
+      const price = basePrice * (1 + 0.01 * Math.sin(i / 10) + randomChange / (dataPoints - i + 1));
+      
+      // Add some random volume
+      const volume = Math.round(1000 + Math.random() * 5000);
+      
+      return {
+        time,
+        price: parseFloat(price.toFixed(2)),
+        volume,
+        timestamp
+      };
+    });
+    
+    setPriceData(mockData);
+  }, [selectedOption, timeRange]);
+  
+  // Calculate position size based on risk and stop price
+  useEffect(() => {
+    if (!selectedOption || !stopPrice) {
+      setPositionSize(0);
       return;
     }
     
-    if (isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
-      toast.error('Please enter a valid price');
+    const currentPrice = parseFloat(selectedOption.currentPrice);
+    const stopPriceValue = parseFloat(stopPrice);
+    const riskAmountValue = parseFloat(riskAmount);
+    
+    if (isNaN(currentPrice) || isNaN(stopPriceValue) || isNaN(riskAmountValue) || stopPriceValue === currentPrice) {
+      setPositionSize(0);
       return;
     }
     
-    if (isNaN(parseFloat(quantity)) || parseFloat(quantity) <= 0) {
-      toast.error('Please enter a valid quantity');
-      return;
-    }
+    // Calculate position size: Risk amount / (Entry price - Stop price)
+    const priceDiff = Math.abs(currentPrice - stopPriceValue);
+    const calculatedPositionSize = riskAmountValue / priceDiff;
     
-    // Check if user has enough balance for buy order
-    if (orderSide === 'buy' && parseFloat(walletBalance) < total) {
-      toast.error('Insufficient balance to place this order');
-      return;
-    }
-    
-    setPlacingOrder(true);
-    
+    setPositionSize(calculatedPositionSize);
+  }, [selectedOption, stopPrice, riskAmount]);
+  
+  const handleOptionChange = (option: MarketOption) => {
+    setSelectedOption(option);
+  };
+  
+  const handleCancelOrder = async (orderId: number) => {
     try {
-      // In a real implementation, we would submit to the API
-      // const response = await fetch('/api/orders', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({
-      //     marketId: market?.id,
-      //     marketOptionId: option.id,
-      //     type: orderType,
-      //     side: orderSide,
-      //     price: parseFloat(price),
-      //     quantity: parseFloat(quantity),
-      //   }),
-      // });
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'DELETE',
+      });
       
-      // if (!response.ok) {
-      //   throw new Error('Failed to place order');
-      // }
+      if (!response.ok) {
+        throw new Error('Failed to cancel order');
+      }
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.success('Order cancelled successfully');
       
-      toast.success(`Order placed successfully`);
-      
-      // Redirect to order history page
-      router.push('/orders');
-      
-    } catch (error: any) {
-      console.error('Error placing order:', error);
-      toast.error(error.message || 'Failed to place order');
-    } finally {
-      setPlacingOrder(false);
+      // Update orders list
+      setOrders(orders.filter(order => order.id !== orderId));
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      toast.error('Failed to cancel order');
     }
   };
-
-  if (status === 'loading' || loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold">Loading...</h2>
-          <p className="text-gray-500">Please wait while we load trading data</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return null; // Will redirect in the useEffect
-  }
-
-  if (!market || !option) {
+  
+  const handleOrderPlaced = () => {
+    // Refresh orders after a new order is placed
+    const fetchOrders = async () => {
+      if (!params.id) return;
+      
+      try {
+        const response = await fetch(`/api/orders?marketId=${params.id}&status=open`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch orders');
+        }
+        
+        const data = await response.json();
+        setOrders(data.orders || []);
+      } catch (error) {
+        console.error('Error fetching orders:', error);
+      }
+    };
+    
+    fetchOrders();
+  };
+  
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <DashboardHeader user={session.user} />
-        <div className="container mx-auto px-4 py-12 text-center">
-          <h1 className="mb-4 text-2xl font-bold text-gray-900">Trading Option Not Found</h1>
-          <p className="text-gray-600">The trading option you selected does not exist or has been removed.</p>
-          <Link 
-            href={`/markets/${marketId}`} 
-            className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-          >
-            Back to Market
-          </Link>
+        <DashboardHeader />
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex justify-center items-center min-h-[60vh]">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
         </div>
       </div>
     );
   }
-
+  
+  if (!market || !selectedOption) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <DashboardHeader />
+        <div className="container mx-auto px-4 py-8">
+          <div className="bg-white p-8 rounded-lg shadow-md text-center">
+            <h1 className="text-2xl font-bold text-red-500 mb-4">Market Not Found</h1>
+            <p className="text-gray-600 mb-6">The market you are looking for does not exist or is no longer available.</p>
+            <Link href="/markets" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+              Browse Markets
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardHeader user={session.user} />
+      <DashboardHeader />
       
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-6">
+      <main className="container mx-auto px-4 py-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{market.name}</h1>
+            <p className="text-gray-600">{market.description}</p>
+          </div>
           <Link 
-            href={`/markets/${marketId}`} 
-            className="inline-flex items-center text-sm text-blue-600 hover:underline"
+            href={`/markets/${market.id}`} 
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
           >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className="mr-1 h-4 w-4" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
             Back to Market
           </Link>
         </div>
         
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-          {/* Trading Form */}
-          <div className="md:col-span-2">
-            <div className="rounded-lg bg-white p-6 shadow-md">
-              <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Place an Order</h1>
-                <p className="text-gray-600">
-                  {market.name} - {market.event.name}
-                </p>
+        {/* Trading Interface */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main chart panel */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow-md overflow-hidden">
+            {/* Market option tabs */}
+            <div className="border-b border-gray-200 bg-gray-50">
+              <div className="flex overflow-x-auto">
+                {market.options?.map((option) => (
+                  <button
+                    key={option.id}
+                    className={`px-4 py-3 text-sm font-medium ${
+                      selectedOption?.id === option.id 
+                        ? 'bg-white text-blue-600 border-b-2 border-blue-500' 
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                    }`}
+                    onClick={() => handleOptionChange(option)}
+                  >
+                    {option.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Chart controls */}
+            <div className="flex justify-between items-center px-4 py-2 border-b border-gray-200">
+              <div className="flex space-x-1">
+                {TIME_RANGES.map((range) => (
+                  <button
+                    key={range.value}
+                    className={`px-3 py-1 text-xs font-medium rounded ${
+                      timeRange === range.value 
+                        ? 'bg-blue-100 text-blue-700' 
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                    onClick={() => setTimeRange(range.value)}
+                  >
+                    {range.label}
+                  </button>
+                ))}
               </div>
               
-              <div className="mb-6 rounded-md bg-blue-50 p-4">
-                <div className="mb-1 text-sm text-gray-600">Selected Option</div>
-                <div className="flex items-center justify-between">
-                  <div className="font-medium">{option.name}</div>
-                  <div className="text-lg font-semibold">{parseFloat(option.currentPrice).toFixed(2)}</div>
-                </div>
-              </div>
-              
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Order Type Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Order Type
-                  </label>
-                  <div className="mt-2 flex space-x-2">
-                    <button
-                      type="button"
-                      className={`rounded-md px-4 py-2 ${
-                        orderType === 'limit'
-                          ? 'bg-blue-600 text-white'
-                          : 'border border-gray-300 text-gray-700'
-                      }`}
-                      onClick={() => setOrderType('limit')}
-                    >
-                      Limit Order
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded-md px-4 py-2 ${
-                        orderType === 'market'
-                          ? 'bg-blue-600 text-white'
-                          : 'border border-gray-300 text-gray-700'
-                      }`}
-                      onClick={() => setOrderType('market')}
-                    >
-                      Market Order
-                    </button>
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    {orderType === 'limit'
-                      ? 'Limit orders execute at your specified price or better.'
-                      : 'Market orders execute immediately at the best available price.'}
-                  </p>
-                </div>
-                
-                {/* Buy/Sell Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Action
-                  </label>
-                  <div className="mt-2 flex space-x-2">
-                    <button
-                      type="button"
-                      className={`rounded-md px-4 py-2 ${
-                        orderSide === 'buy'
-                          ? 'bg-green-600 text-white'
-                          : 'border border-gray-300 text-gray-700'
-                      }`}
-                      onClick={() => setOrderSide('buy')}
-                    >
-                      Buy
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded-md px-4 py-2 ${
-                        orderSide === 'sell'
-                          ? 'bg-red-600 text-white'
-                          : 'border border-gray-300 text-gray-700'
-                      }`}
-                      onClick={() => setOrderSide('sell')}
-                    >
-                      Sell
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Price Input */}
-                <div>
-                  <label htmlFor="price" className="block text-sm font-medium text-gray-700">
-                    Price
-                  </label>
-                  <div className="relative mt-1 rounded-md shadow-sm">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <span className="text-gray-500">$</span>
-                    </div>
-                    <input
-                      type="number"
-                      name="price"
-                      id="price"
-                      className="block w-full rounded-md border-gray-300 pl-7 pr-12 focus:border-blue-500 focus:ring-blue-500"
-                      placeholder="0.00"
-                      step="0.01"
-                      min="0.01"
-                      value={price}
-                      onChange={(e) => setPrice(e.target.value)}
-                      disabled={orderType === 'market'}
-                      required={orderType === 'limit'}
-                    />
-                  </div>
-                </div>
-                
-                {/* Quantity Input */}
-                <div>
-                  <label htmlFor="quantity" className="block text-sm font-medium text-gray-700">
-                    Quantity
-                  </label>
-                  <input
-                    type="number"
-                    name="quantity"
-                    id="quantity"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Enter quantity"
-                    min="0.01"
-                    step="0.01"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    required
-                  />
-                </div>
-                
-                {/* Order Summary */}
-                <div className="rounded-md bg-gray-50 p-4">
-                  <h3 className="mb-2 font-medium">Order Summary</h3>
-                  <div className="flex justify-between">
-                    <span>Price per Unit:</span>
-                    <span>${orderType === 'market' ? option.currentPrice : price}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Quantity:</span>
-                    <span>{quantity}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between border-t border-gray-200 pt-2 font-medium">
-                    <span>Total {orderSide === 'buy' ? 'Cost' : 'Proceeds'}:</span>
-                    <span>${total.toFixed(2)}</span>
-                  </div>
-                </div>
-                
+              <div className="flex space-x-1">
                 <button
-                  type="submit"
-                  disabled={placingOrder}
-                  className={`w-full rounded-md px-4 py-2 text-white ${
-                    orderSide === 'buy'
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-red-600 hover:bg-red-700'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50`}
+                  className={`p-2 text-xs rounded ${
+                    chartType === 'line' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setChartType('line')}
                 >
-                  {placingOrder
-                    ? 'Processing...'
-                    : `${orderSide === 'buy' ? 'Buy' : 'Sell'} ${option.name}`}
+                  Line
                 </button>
-              </form>
+                <button
+                  className={`p-2 text-xs rounded ${
+                    chartType === 'area' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setChartType('area')}
+                >
+                  Area
+                </button>
+                <button
+                  className={`p-2 text-xs rounded ${
+                    chartType === 'bar' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                  onClick={() => setChartType('bar')}
+                >
+                  Bar
+                </button>
+              </div>
+            </div>
+            
+            {/* Price chart */}
+            <div className="p-4 h-96">
+              <ResponsiveContainer width="100%" height="100%">
+                {chartType === 'line' ? (
+                  <LineChart data={priceData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" />
+                    <YAxis domain={['auto', 'auto']} />
+                    <Tooltip 
+                      formatter={(value: any) => [`$${value}`, 'Price']}
+                      labelFormatter={(label) => `Time: ${label}`}
+                    />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="price" 
+                      name={selectedOption.name} 
+                      stroke="#0088FE" 
+                      activeDot={{ r: 8 }} 
+                    />
+                  </LineChart>
+                ) : chartType === 'area' ? (
+                  <AreaChart data={priceData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" />
+                    <YAxis domain={['auto', 'auto']} />
+                    <Tooltip 
+                      formatter={(value: any) => [`$${value}`, 'Price']}
+                      labelFormatter={(label) => `Time: ${label}`}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="price"
+                      name={selectedOption.name}
+                      stroke="#0088FE"
+                      fill="#0088FE"
+                      fillOpacity={0.3}
+                    />
+                  </AreaChart>
+                ) : (
+                  <BarChart data={priceData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="volume" name="Volume" fill="#8884d8" />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+            
+            {/* Order history */}
+            <div className="p-4 border-t border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Open Orders</h2>
+              {orders.length === 0 ? (
+                <div className="text-gray-500 text-center py-4">
+                  No open orders for this market
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Option
+                        </th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Type
+                        </th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Side
+                        </th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Price
+                        </th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Quantity
+                        </th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {orders.map((order) => (
+                        <tr key={order.id}>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                            {order.marketOption?.name}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500 capitalize">
+                            {order.type}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              order.side === 'buy' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {order.side.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                            {order.type === 'market' ? 'Market' : `$${parseFloat(order.price).toFixed(2)}`}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                            {parseFloat(order.quantity).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => handleCancelOrder(order.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Cancel
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
           
-          {/* Wallet Info */}
-          <div>
-            <div className="sticky top-4 rounded-lg bg-white p-6 shadow-md">
-              <h2 className="mb-4 text-lg font-semibold">Your Wallet</h2>
+          {/* Order book and trading panel */}
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <OrderBook
+                marketId={market.id}
+                marketOptionId={selectedOption.id}
+                optionName={selectedOption.name}
+                currentPrice={selectedOption.currentPrice}
+              />
+            </div>
+            
+            <div className="bg-white rounded-lg shadow-md overflow-hidden p-4">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Position Sizing Tool</h2>
               
-              <div className="mb-6">
-                <div className="text-sm text-gray-600">Available Balance</div>
-                <div className="text-2xl font-bold text-green-600">
-                  ${parseFloat(walletBalance).toFixed(2)}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Risk Amount ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={riskAmount}
+                    onChange={(e) => setRiskAmount(e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
                 </div>
-              </div>
-              
-              {orderSide === 'buy' && (
-                <div className={`rounded-md p-3 ${
-                  parseFloat(walletBalance) >= total
-                    ? 'bg-green-50 text-green-800'
-                    : 'bg-red-50 text-red-800'
-                }`}>
-                  {parseFloat(walletBalance) >= total
-                    ? 'You have sufficient balance for this order'
-                    : 'Insufficient balance for this order'}
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stop Price
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={stopPrice}
+                    onChange={(e) => setStopPrice(e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="Enter your stop price"
+                  />
                 </div>
-              )}
-              
-              <div className="mt-4">
-                <Link
-                  href="/wallet"
-                  className="block rounded-md border border-blue-600 px-4 py-2 text-center text-blue-600 hover:bg-blue-50"
-                >
-                  Manage Wallet
-                </Link>
+                
+                <div className="pt-4 border-t border-gray-200">
+                  <div className="flex justify-between items-center text-sm mb-2">
+                    <span className="text-gray-700">Current Price:</span>
+                    <span className="font-medium">${selectedOption.currentPrice}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center text-sm mb-2">
+                    <span className="text-gray-700">Recommended Position Size:</span>
+                    <span className="font-medium">{positionSize.toFixed(2)} shares</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center text-sm mb-4">
+                    <span className="text-gray-700">Total Cost:</span>
+                    <span className="font-medium">
+                      ${(positionSize * parseFloat(selectedOption.currentPrice)).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
+            
+            <OrderForm
+              marketId={market.id}
+              marketOptionId={selectedOption.id}
+              optionName={selectedOption.name}
+              currentPrice={selectedOption.currentPrice}
+            />
           </div>
         </div>
       </main>

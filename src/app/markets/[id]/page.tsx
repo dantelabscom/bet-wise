@@ -1,278 +1,343 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import DashboardHeader from '@/components/dashboard/Header';
 import toast from 'react-hot-toast';
+import DashboardHeader from '@/components/dashboard/Header';
+import { Market, MarketOption, getMarketStatusDisplay, calculateImpliedProbability, getMarketDescription, formatPrice } from '@/lib/models/market';
+import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
-interface MarketOption {
-  id: number;
+// Chart data type definitions
+interface ChartDataPoint {
   name: string;
-  currentPrice: string;
+  value: number;
 }
 
-interface Market {
-  id: number;
+interface PriceHistoryPoint {
   name: string;
-  description: string;
-  status: string;
-  event: {
-    id: number;
-    name: string;
-    startTime: string;
-    endTime: string;
-  };
-  sport: {
-    id: number;
-    name: string;
-    type: string;
-  };
-  options: MarketOption[];
-  createdAt: string;
+  time: string;
+  price: number;
 }
 
-interface MarketDetailPageProps {
-  params: {
-    id: string;
-  };
-}
-
-export default function MarketDetailPage({ params }: MarketDetailPageProps) {
-  const marketId = params.id;
-  const { data: session, status } = useSession();
+export default function MarketDetailPage() {
+  const params = useParams();
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [market, setMarket] = useState<Market | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedOption, setSelectedOption] = useState<MarketOption | null>(null);
-
-  // Redirect if not authenticated
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
+  
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+  
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/login');
     }
   }, [status, router]);
-
-  // Fetch market data
+  
   useEffect(() => {
     const fetchMarket = async () => {
-      if (status === 'authenticated') {
-        try {
-          // Simulating API call with mock data for now
-          // In a real implementation, we would fetch from the API:
-          // const response = await fetch(`/api/markets/${marketId}`);
-          // const data = await response.json();
-          
-          // Mock data
-          const mockMarket: Market = {
-            id: Number(marketId),
-            name: 'Super Bowl Winner 2025',
-            description: 'Predict the winner of Super Bowl LIX in February 2025',
-            status: 'open',
-            event: {
-              id: 1,
-              name: 'Super Bowl LIX',
-              startTime: new Date('2025-02-09T23:30:00Z').toISOString(),
-              endTime: new Date('2025-02-10T03:30:00Z').toISOString(),
-            },
-            sport: {
-              id: 1,
-              name: 'Football',
-              type: 'football',
-            },
-            options: [
-              { id: 1, name: 'Kansas City Chiefs', currentPrice: '5.50' },
-              { id: 2, name: 'San Francisco 49ers', currentPrice: '6.20' },
-              { id: 3, name: 'Buffalo Bills', currentPrice: '9.00' },
-              { id: 4, name: 'Baltimore Ravens', currentPrice: '10.00' },
-              { id: 5, name: 'Detroit Lions', currentPrice: '12.00' },
-              { id: 6, name: 'Dallas Cowboys', currentPrice: '15.00' },
-            ],
-            createdAt: new Date().toISOString(),
-          };
-          
-          setMarket(mockMarket);
-          
-          // Set first option as selected by default
-          if (mockMarket.options.length > 0) {
-            setSelectedOption(mockMarket.options[0]);
-          }
-          
-        } catch (error) {
-          console.error('Error fetching market:', error);
-          toast.error('Failed to load market data');
-        } finally {
-          setLoading(false);
+      if (!params.id) return;
+      
+      try {
+        const response = await fetch(`/api/markets/${params.id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch market');
         }
+        
+        const data = await response.json();
+        setMarket(data);
+        
+        // Prepare pie chart data
+        if (data.options) {
+          const chartData = data.options.map((option: MarketOption) => ({
+            name: option.name,
+            value: parseFloat((100 / parseFloat(option.currentPrice)).toFixed(2)), // Convert odds to probability %
+          }));
+          setChartData(chartData);
+          
+          // Prepare price history chart data (mock data for now, would be fetched in a real app)
+          const now = new Date();
+          const mockPriceHistory = data.options.flatMap((option: MarketOption) => {
+            return Array.from({ length: 10 }, (_, i) => {
+              const time = new Date(now.getTime() - (9 - i) * 3600000); // Last 10 hours
+              return {
+                name: option.name,
+                time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                price: parseFloat(option.currentPrice) + (Math.random() * 0.4 - 0.2),
+              };
+            });
+          });
+          setPriceHistory(mockPriceHistory);
+        }
+      } catch (error) {
+        console.error('Error fetching market:', error);
+        toast.error('Failed to load market data');
+      } finally {
+        setLoading(false);
       }
     };
-
+    
     fetchMarket();
-  }, [status, marketId]);
-
-  const handleOptionClick = (option: MarketOption) => {
-    setSelectedOption(option);
-  };
-
-  if (status === 'loading' || loading) {
+  }, [params.id]);
+  
+  if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold">Loading...</h2>
-          <p className="text-gray-500">Please wait while we load market data</p>
+      <div className="min-h-screen bg-gray-50">
+        <DashboardHeader />
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex justify-center items-center min-h-[60vh]">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
         </div>
       </div>
     );
   }
-
-  if (!session) {
-    return null; // Will redirect in the useEffect
-  }
-
+  
   if (!market) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <DashboardHeader user={session.user} />
-        <div className="container mx-auto px-4 py-12 text-center">
-          <h1 className="mb-4 text-2xl font-bold text-gray-900">Market Not Found</h1>
-          <p className="text-gray-600">The market you are looking for does not exist or has been removed.</p>
-          <Link 
-            href="/markets" 
-            className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-          >
-            Browse All Markets
-          </Link>
+        <DashboardHeader />
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex flex-col justify-center items-center min-h-[60vh]">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Market Not Found</h2>
+            <p className="text-gray-600 mb-6">The market you're looking for doesn't exist or has been removed.</p>
+            <Link href="/markets" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              Back to Markets
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+  
+  // Get market metadata based on type
+  const getMarketMetadata = () => {
+    if (!market.metadata) return null;
+    
+    switch (market.type) {
+      case 'over_under':
+        return (
+          <div className="mt-2 text-sm text-gray-600">
+            <span className="font-medium">Line:</span> {market.metadata.line} {market.metadata.unit || 'points'}
+          </div>
+        );
+      case 'spread':
+        return (
+          <div className="mt-2 text-sm text-gray-600">
+            <span className="font-medium">Spread:</span> {market.metadata.spread} points
+            <br />
+            <span className="font-medium">Favorite:</span> {market.metadata.favorite === 'home' ? market.event?.homeTeam : market.event?.awayTeam}
+          </div>
+        );
+      case 'prop':
+        return (
+          <div className="mt-2 text-sm text-gray-600">
+            <span className="font-medium">Prop Type:</span> {market.metadata.propType?.replace('_', ' ')}
+            {market.metadata.player && (
+              <div><span className="font-medium">Player:</span> {market.metadata.player}</div>
+            )}
+            {market.metadata.team && (
+              <div><span className="font-medium">Team:</span> {market.metadata.team}</div>
+            )}
+          </div>
+        );
+      case 'handicap':
+        return (
+          <div className="mt-2 text-sm text-gray-600">
+            <span className="font-medium">Handicap:</span> {market.metadata.handicap}
+            <br />
+            <span className="font-medium">Team:</span> {market.metadata.team === 'home' ? market.event?.homeTeam : market.event?.awayTeam}
+          </div>
+        );
+      default:
+        return null;
+    }
   };
-
+  
+  const getOptionMetadata = (option: MarketOption) => {
+    if (!option.metadata) return null;
+    
+    switch (market.type) {
+      case 'over_under':
+        return option.metadata.type === 'over' ? 'Over' : 'Under';
+      case 'spread':
+        return option.metadata.type === 'favorite' ? 'Cover' : 'Not Cover';
+      default:
+        return null;
+    }
+  };
+  
+  // Calculate market fairness percentage
+  const getFairnessPercentage = () => {
+    if (!market.options || market.options.length === 0) return 100;
+    
+    const totalImpliedProbability = market.options.reduce((sum, option) => {
+      return sum + calculateImpliedProbability(parseFloat(option.currentPrice));
+    }, 0);
+    
+    // Return market fairness (100% = perfectly fair, < 100% = house edge)
+    return (100 / (totalImpliedProbability * 100)).toFixed(2);
+  };
+  
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardHeader user={session.user} />
-      
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <Link 
-            href="/markets" 
-            className="inline-flex items-center text-sm text-blue-600 hover:underline"
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className="mr-1 h-4 w-4" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to All Markets
-          </Link>
-        </div>
-        
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-          {/* Market Info */}
-          <div className="md:col-span-2">
-            <div className="rounded-lg bg-white p-6 shadow-md">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <span className="inline-block rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
-                    {market.sport.name}
-                  </span>
-                  <span className="ml-2 inline-block rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800">
-                    {market.status.toUpperCase()}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-500">
-                  ID: {market.id}
-                </div>
-              </div>
-              
-              <h1 className="mb-2 text-2xl font-bold text-gray-900">{market.name}</h1>
-              
-              <p className="mb-4 text-gray-600">{market.description}</p>
-              
-              <div className="mb-4 space-y-1 text-sm text-gray-600">
-                <p>
-                  <span className="font-medium">Event:</span> {market.event.name}
-                </p>
-                <p>
-                  <span className="font-medium">Start Time:</span> {formatDate(market.event.startTime)}
-                </p>
-                <p>
-                  <span className="font-medium">End Time:</span> {market.event.endTime ? formatDate(market.event.endTime) : 'TBD'}
-                </p>
-              </div>
-              
-              <h2 className="mb-3 text-lg font-semibold">Market Options</h2>
-              
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {market.options.map(option => (
-                  <div 
-                    key={option.id}
-                    className={`cursor-pointer rounded-md border p-3 transition-colors ${
-                      selectedOption?.id === option.id 
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                    }`}
-                    onClick={() => handleOptionClick(option)}
-                  >
-                    <div className="mb-1 font-medium">{option.name}</div>
-                    <div className="text-lg font-semibold">{parseFloat(option.currentPrice).toFixed(2)}</div>
+      <DashboardHeader />
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {/* Market Header */}
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">{market.name}</h1>
+                <p className="text-gray-600 mb-2">{market.description || getMarketDescription(market)}</p>
+                <div className="flex items-center space-x-4 text-sm text-gray-500">
+                  <div className="flex items-center">
+                    <span className="font-medium">Event:</span>
+                    <span className="ml-1">{market.event?.name}</span>
                   </div>
-                ))}
+                  <div className="flex items-center">
+                    <span className="font-medium">Type:</span>
+                    <span className="ml-1 capitalize">{market.type.replace('_', ' ')}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="font-medium">Status:</span>
+                    <span className={`ml-1 ${market.status === 'open' ? 'text-green-600' : 'text-amber-600'}`}>
+                      {getMarketStatusDisplay(market.status)}
+                    </span>
+                  </div>
+                </div>
+                {market.event?.homeTeam && market.event?.awayTeam && (
+                  <div className="mt-2 text-sm text-gray-600">
+                    <span className="font-medium">Teams:</span> {market.event.homeTeam} vs {market.event.awayTeam}
+                  </div>
+                )}
+                {getMarketMetadata()}
+                <div className="mt-2 text-sm text-gray-600">
+                  <span className="font-medium">Trading Volume:</span> ${parseInt(market.tradingVolume).toLocaleString()}
+                </div>
+                <div className="mt-2 text-sm text-gray-600">
+                  <span className="font-medium">Market Fairness:</span> {getFairnessPercentage()}%
+                </div>
+              </div>
+              
+              <div className="flex">
+                <Link
+                  href={`/markets/${market.id}/trade`}
+                  className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 ${
+                    market.status !== 'open' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  onClick={(e) => {
+                    if (market.status !== 'open') {
+                      e.preventDefault();
+                      toast.error('This market is not available for trading');
+                    }
+                  }}
+                >
+                  Trade
+                </Link>
               </div>
             </div>
           </div>
           
-          {/* Trading Panel */}
-          <div>
-            <div className="sticky top-4 rounded-lg bg-white p-6 shadow-md">
-              <h2 className="mb-4 text-lg font-semibold">Place an Order</h2>
-              
-              {selectedOption ? (
-                <>
-                  <div className="mb-4 rounded-md bg-gray-50 p-3">
-                    <div className="text-sm text-gray-600">Selected Option</div>
-                    <div className="font-medium">{selectedOption.name}</div>
-                    <div className="text-lg font-semibold">{parseFloat(selectedOption.currentPrice).toFixed(2)}</div>
-                  </div>
-                  
-                  <Link 
-                    href={`/markets/${market.id}/trade?option=${selectedOption.id}`}
-                    className="block w-full rounded-md bg-blue-600 px-4 py-2 text-center font-medium text-white hover:bg-blue-700"
-                  >
-                    Trade Now
-                  </Link>
-                </>
-              ) : (
-                <div className="text-gray-500">
-                  Select an option to trade
-                </div>
-              )}
-              
-              <hr className="my-4 border-gray-200" />
-              
-              <div className="text-sm text-gray-600">
-                <h3 className="mb-2 font-medium">About Trading</h3>
-                <ul className="list-inside list-disc space-y-1">
-                  <li>Buy and sell positions on this market</li>
-                  <li>Prices fluctuate based on market activity</li>
-                  <li>Winning positions pay out at 1.00</li>
-                  <li>Losing positions are valued at 0.00</li>
-                </ul>
+          {/* Charts Section */}
+          <div className="grid md:grid-cols-2 gap-6 p-6 border-b border-gray-200">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Implied Probabilities</h2>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, value }: { name: string; value: number }) => `${name}: ${value.toFixed(1)}%`}
+                    >
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => `${value}%`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Price History</h2>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={priceHistory}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" />
+                    <YAxis domain={['auto', 'auto']} />
+                    <Tooltip />
+                    <Legend />
+                    {market.options?.map((option, index) => (
+                      <Line
+                        key={option.id}
+                        type="monotone"
+                        dataKey="price"
+                        data={priceHistory.filter(item => item.name === option.name)}
+                        name={option.name}
+                        stroke={COLORS[index % COLORS.length]}
+                        activeDot={{ r: 8 }}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
+          
+          {/* Market Options */}
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Options</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {market.options?.map((option) => (
+                <div key={option.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-medium text-gray-900">{option.name}</h3>
+                      {getOptionMetadata(option) && (
+                        <div className="text-sm text-gray-600">{getOptionMetadata(option)}</div>
+                      )}
+                      <div className="text-sm text-gray-500 mt-1">
+                        Implied probability: {(100 / parseFloat(option.currentPrice)).toFixed(1)}%
+                      </div>
+                    </div>
+                    <div className="text-xl font-bold text-blue-600">
+                      {formatPrice(option.currentPrice)}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <Link 
+                      href={`/markets/${market.id}/trade?option=${option.id}&side=buy`}
+                      className="px-3 py-1.5 bg-green-100 text-green-800 rounded text-center text-sm font-medium hover:bg-green-200"
+                    >
+                      Buy
+                    </Link>
+                    <Link 
+                      href={`/markets/${market.id}/trade?option=${option.id}&side=sell`}
+                      className="px-3 py-1.5 bg-red-100 text-red-800 rounded text-center text-sm font-medium hover:bg-red-200"
+                    >
+                      Sell
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 } 

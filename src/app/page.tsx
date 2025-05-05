@@ -34,7 +34,7 @@ export default function HomePage() {
       <header className="bg-white shadow-sm">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center">
-            <span className="text-xl font-bold text-blue-600">JINZO</span>
+            <span className="text-xl font-bold text-blue-600">BetWise</span>
           </div>
           <div className="flex items-center space-x-4">
             <Link 
@@ -193,7 +193,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="mb-8 grid grid-cols-1 gap-8 md:grid-cols-4">
             <div>
-              <h3 className="mb-4 text-xl font-bold">JINZO</h3>
+              <h3 className="mb-4 text-xl font-bold">BetWise</h3>
               <p className="text-gray-400">
                 The next generation sports trading platform.
               </p>
@@ -240,7 +240,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="border-t border-gray-800 pt-8 text-center text-gray-400">
-            <p>&copy; {new Date().getFullYear()} Jinzo. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} BetWise. All rights reserved.</p>
           </div>
         </div>
       </footer>

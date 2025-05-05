@@ -60,7 +60,13 @@ async function main() {
     `;
     await migrationClient`
       DO $$ BEGIN
-        CREATE TYPE "market_status" AS ENUM ('open', 'closed', 'settled', 'cancelled');
+        CREATE TYPE "market_status" AS ENUM ('open', 'suspended', 'closed', 'settled', 'cancelled');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+    `;
+    await migrationClient`
+      DO $$ BEGIN
+        CREATE TYPE "market_type" AS ENUM ('winner', 'over_under', 'spread', 'prop', 'handicap', 'custom');
         EXCEPTION WHEN duplicate_object THEN NULL;
       END $$;
     `;
@@ -125,9 +131,12 @@ async function main() {
         "sport_id" INTEGER NOT NULL REFERENCES "sports"("id"),
         "name" TEXT NOT NULL,
         "description" TEXT,
+        "home_team" TEXT,
+        "away_team" TEXT,
         "start_time" TIMESTAMP NOT NULL,
         "end_time" TIMESTAMP,
         "is_active" BOOLEAN NOT NULL DEFAULT TRUE,
+        "result" JSONB,
         "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
         "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
       );
@@ -140,8 +149,13 @@ async function main() {
         "event_id" INTEGER NOT NULL REFERENCES "events"("id"),
         "name" TEXT NOT NULL,
         "description" TEXT,
+        "type" market_type NOT NULL DEFAULT 'winner',
         "status" market_status NOT NULL DEFAULT 'open',
+        "metadata" JSONB,
         "settled_option" TEXT,
+        "settled_at" TIMESTAMP,
+        "suspended_reason" TEXT,
+        "trading_volume" DECIMAL(12, 2) NOT NULL DEFAULT '0',
         "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
         "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
       );
@@ -153,9 +167,25 @@ async function main() {
         "id" SERIAL PRIMARY KEY,
         "market_id" INTEGER NOT NULL REFERENCES "markets"("id"),
         "name" TEXT NOT NULL,
+        "initial_price" DECIMAL(12, 2) NOT NULL,
         "current_price" DECIMAL(12, 2) NOT NULL,
+        "last_price" DECIMAL(12, 2),
+        "min_price" DECIMAL(12, 2),
+        "max_price" DECIMAL(12, 2),
+        "metadata" JSONB,
+        "weight" DECIMAL(12, 4) NOT NULL DEFAULT '1',
         "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
         "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `;
+    
+    // Create market price history table
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS "market_price_history" (
+        "id" SERIAL PRIMARY KEY,
+        "market_option_id" INTEGER NOT NULL REFERENCES "market_options"("id"),
+        "price" DECIMAL(12, 2) NOT NULL,
+        "timestamp" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `;
 
@@ -172,8 +202,37 @@ async function main() {
         "quantity" DECIMAL(12, 2) NOT NULL,
         "filled_quantity" DECIMAL(12, 2) NOT NULL DEFAULT '0',
         "status" order_status NOT NULL DEFAULT 'open',
+        "expires_at" TIMESTAMP,
         "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
         "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `;
+    
+    // Create positions table
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS "positions" (
+        "id" SERIAL PRIMARY KEY,
+        "user_id" TEXT NOT NULL REFERENCES "users"("id"),
+        "market_id" INTEGER NOT NULL REFERENCES "markets"("id"),
+        "market_option_id" INTEGER NOT NULL REFERENCES "market_options"("id"),
+        "quantity" DECIMAL(12, 2) NOT NULL,
+        "average_price" DECIMAL(12, 2) NOT NULL,
+        "realized_pnl" DECIMAL(12, 2) NOT NULL DEFAULT '0',
+        "created_at" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updated_at" TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `;
+    
+    // Create transactions table
+    await migrationClient`
+      CREATE TABLE IF NOT EXISTS "transactions" (
+        "id" SERIAL PRIMARY KEY,
+        "wallet_id" INTEGER NOT NULL REFERENCES "wallets"("id"),
+        "amount" DECIMAL(12, 2) NOT NULL,
+        "type" TEXT NOT NULL,
+        "reference" TEXT,
+        "description" TEXT,
+        "created_at" TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `;
 

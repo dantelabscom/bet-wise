@@ -5,24 +5,16 @@ import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
 import { Menu, X, ChevronDown } from 'lucide-react';
 
-interface UserType {
-  id: string;
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-}
-
-interface DashboardHeaderProps {
-  user: UserType;
-}
-
-export default function DashboardHeader({ user }: DashboardHeaderProps) {
+export default function DashboardHeader() {
+  const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/' });
   };
+
+  const user = session?.user || { name: 'User', email: null, id: '', image: null };
 
   return (
     <header className="bg-white shadow-sm">
@@ -33,7 +25,7 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
               href="/" 
               className="flex items-center"
             >
-              <span className="text-xl font-bold text-blue-600">JINZO</span>
+              <span className="text-xl font-bold text-blue-600">BetWise</span>
             </Link>
             
             <nav className="ml-10 hidden space-x-8 md:flex">
@@ -50,10 +42,22 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
                 Markets
               </Link>
               <Link 
+                href="/sports" 
+                className="text-gray-500 hover:text-blue-600"
+              >
+                Sports
+              </Link>
+              <Link 
                 href="/positions" 
                 className="text-gray-500 hover:text-blue-600"
               >
                 My Positions
+              </Link>
+              <Link 
+                href="/analytics" 
+                className="text-gray-500 hover:text-blue-600"
+              >
+                Analytics
               </Link>
               <Link 
                 href="/wallet" 
@@ -131,11 +135,25 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
               Markets
             </Link>
             <Link 
+              href="/sports" 
+              className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Sports
+            </Link>
+            <Link 
               href="/positions" 
               className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100"
               onClick={() => setMobileMenuOpen(false)}
             >
               My Positions
+            </Link>
+            <Link 
+              href="/analytics" 
+              className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Analytics
             </Link>
             <Link 
               href="/wallet" 

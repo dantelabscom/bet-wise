@@ -113,7 +113,7 @@ export default function WalletPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardHeader user={session.user} />
+      <DashboardHeader />
       
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
