@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
 import { Menu, X, ChevronDown } from 'lucide-react';
@@ -9,12 +9,31 @@ export default function DashboardHeader() {
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [sportsMenuOpen, setSportsMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/' });
   };
 
   const user = session?.user || { name: 'User', email: null, id: '', image: null };
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Close menus when clicking outside of them
+      if (profileMenuOpen || sportsMenuOpen) {
+        const target = event.target as HTMLElement;
+        
+        if (!target.closest('.profile-menu') && !target.closest('.sports-menu')) {
+          setProfileMenuOpen(false);
+          setSportsMenuOpen(false);
+        }
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [profileMenuOpen, sportsMenuOpen]);
 
   return (
     <header className="bg-white shadow-sm">
@@ -41,12 +60,32 @@ export default function DashboardHeader() {
               >
                 Markets
               </Link>
-              <Link 
-                href="/sports" 
-                className="text-gray-500 hover:text-blue-600"
-              >
-                Sports
-              </Link>
+              <div className="relative sports-menu">
+                <button 
+                  onClick={() => setSportsMenuOpen(!sportsMenuOpen)}
+                  className="text-gray-500 hover:text-blue-600 flex items-center"
+                >
+                  Sports <ChevronDown size={16} className="ml-1" />
+                </button>
+                {sportsMenuOpen && (
+                  <div className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20">
+                    <Link 
+                      href="/sports" 
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setSportsMenuOpen(false)}
+                    >
+                      All Sports
+                    </Link>
+                    <Link 
+                      href="/markets/cricket" 
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setSportsMenuOpen(false)}
+                    >
+                      Cricket
+                    </Link>
+                  </div>
+                )}
+              </div>
               <Link 
                 href="/positions" 
                 className="text-gray-500 hover:text-blue-600"
@@ -69,7 +108,7 @@ export default function DashboardHeader() {
           </div>
           
           <div className="hidden items-center md:flex">
-            <div className="relative">
+            <div className="relative profile-menu">
               <button
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 className="flex items-center space-x-2 rounded-md px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -140,6 +179,13 @@ export default function DashboardHeader() {
               onClick={() => setMobileMenuOpen(false)}
             >
               Sports
+            </Link>
+            <Link 
+              href="/markets/cricket" 
+              className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100 pl-6"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Cricket Markets
             </Link>
             <Link 
               href="/positions" 

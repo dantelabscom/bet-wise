@@ -5,7 +5,20 @@ import { relations } from 'drizzle-orm';
 export const roleEnum = pgEnum('role', ['user', 'admin']);
 export const sportTypeEnum = pgEnum('sport_type', ['football', 'basketball', 'baseball', 'hockey', 'soccer', 'other']);
 export const marketStatusEnum = pgEnum('market_status', ['open', 'suspended', 'closed', 'settled', 'cancelled']);
-export const marketTypeEnum = pgEnum('market_type', ['winner', 'over_under', 'spread', 'prop', 'handicap', 'custom']);
+export const marketTypeEnum = pgEnum('market_type', [
+  'winner', 
+  'over_under', 
+  'spread', 
+  'prop', 
+  'handicap', 
+  'custom',
+  'match_winner',
+  'total_runs',
+  'player_performance',
+  'innings_score',
+  'wickets',
+  'next_dismissal'
+]);
 export const orderTypeEnum = pgEnum('order_type', ['market', 'limit']);
 export const orderStatusEnum = pgEnum('order_status', ['open', 'filled', 'partially_filled', 'cancelled']);
 export const orderSideEnum = pgEnum('order_side', ['buy', 'sell']);

@@ -15,8 +15,8 @@ interface LiveGamePageProps {
   };
 }
 
-export default function LiveGamePage({ params, searchParams }: LiveGamePageProps) {
-  const { gameId } = params;
+export default async function LiveGamePage({ params, searchParams }: LiveGamePageProps) {
+  const gameId = params.gameId;
   const sport = searchParams.sport || 'nba';
   
   return (

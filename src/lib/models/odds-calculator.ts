@@ -26,6 +26,9 @@ export interface BookParams {
  * "true odds" based on market data, order flow, and historical performance.
  */
 export class OddsCalculator {
+  static calculateInPlayAdjustment(currentOdds: number[], scoreChange: number, normalizedTimeElapsed: number, momentum: any) {
+      throw new Error('Method not implemented.');
+  }
   // Market parameters
   private readonly defaultOverround = 1.05; // 5% margin
   private readonly defaultAdjustmentCap = 0.15; // 15% max adjustment

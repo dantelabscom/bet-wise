@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { format } from 'date-fns';
@@ -62,7 +64,14 @@ export default function LiveGameView({ gameId, sport = 'nba' }: LiveGameViewProp
       setError(null);
       
       try {
-        const response = await fetch(`/api/sports/live?gameId=${gameId}&sport=${sport}`);
+        // For cricket, use the specific cricket match endpoint
+        let endpoint = `/api/sports/live?gameId=${gameId}&sport=${sport}`;
+        
+        if (sport.toLowerCase() === 'cricket') {
+          endpoint = `/api/sports/cricket/match/${gameId}`;
+        }
+        
+        const response = await fetch(endpoint);
         
         if (!response.ok) {
           throw new Error('Failed to fetch game data');

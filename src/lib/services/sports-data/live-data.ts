@@ -28,10 +28,10 @@ export class LiveDataService {
   
   // Private constructor for singleton pattern
   private constructor() {
-    // Read API key from environment variables
-    this.apiKey = process.env.SPORTS_DATA_WS_API_KEY || '';
+    // Read API key from environment variables - using NEXT_PUBLIC_ for client-side
+    this.apiKey = process.env.NEXT_PUBLIC_SPORTS_DATA_WS_API_KEY || '';
     if (!this.apiKey) {
-      console.error('SPORTS_DATA_WS_API_KEY is not set in environment variables');
+      console.error('NEXT_PUBLIC_SPORTS_DATA_WS_API_KEY is not set in environment variables');
     }
     
     this.subscriptions.set('score_update', []);

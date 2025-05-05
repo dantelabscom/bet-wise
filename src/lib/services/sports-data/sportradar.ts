@@ -89,12 +89,13 @@ export class SportRadarService {
    * Private constructor for singleton pattern
    */
   private constructor() {
-    // Read API key from environment variables
-    this.apiKey = process.env.SPORTRADAR_API_KEY || '';
+    // Read API key from environment variables - using NEXT_PUBLIC_ for client-side
+    this.apiKey = process.env.NEXT_PUBLIC_SPORTRADAR_API_KEY || '';
     if (!this.apiKey) {
-      console.error('SPORTRADAR_API_KEY is not set in environment variables');
+      console.error('NEXT_PUBLIC_SPORTRADAR_API_KEY is not set in environment variables');
     }
-    this.baseUrl = 'https://api.sportradar.com/v4';
+    // Update to correct API base URL for cricket v2
+    this.baseUrl = 'https://api.sportradar.com';
   }
   
   /**
@@ -121,10 +122,12 @@ export class SportRadarService {
     try {
       // Different sports have different endpoint structures
       const endpoint = this.getSportEndpoint(sport, 'schedule');
-      const params = {
+      let params: Record<string, any> = {
         api_key: this.apiKey,
         ...this.getSportSpecificParams(sport, 'schedule', { daysAhead, leagueId }),
       };
+      
+      console.log(`Fetching upcoming games: ${this.baseUrl}${endpoint}`, params);
       
       const response = await axios.get(`${this.baseUrl}${endpoint}`, { params });
       
@@ -136,11 +139,11 @@ export class SportRadarService {
         data: games,
       };
     } catch (error: any) {
-      console.error('Error fetching upcoming games:', error.message);
+      console.error('Error fetching upcoming games:', error.response?.data || error.message);
       return {
         success: false,
         data: null,
-        error: error.message,
+        error: error.response?.data?.message || error.message || 'Failed to fetch upcoming games',
       };
     }
   }
@@ -357,6 +360,40 @@ export class SportRadarService {
    * @param id Optional ID for game or team specific endpoints
    */
   private getSportEndpoint(sport: string, action: string, id?: string): string {
+    if (sport.toLowerCase() === 'cricket') {
+      // Use cricket-t2 specific endpoints as documented
+      const language = 'en';
+      const format = 'json';
+      
+      switch (action) {
+        case 'schedule':
+          // Daily schedule endpoint
+          const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+          return `/cricket-t2/${language}/schedules/${today}/schedule.${format}`;
+        case 'game_summary':
+          return `/cricket-t2/${language}/matches/${id}/summary.${format}`;
+        case 'game_timeline':
+          return `/cricket-t2/${language}/matches/${id}/timeline.${format}`;
+        case 'game_lineups':
+          return `/cricket-t2/${language}/matches/${id}/lineups.${format}`;
+        case 'tournament_list':
+          return `/cricket-t2/${language}/tournaments.${format}`;
+        case 'tournament_info':
+          return `/cricket-t2/${language}/tournaments/${id}/info.${format}`;
+        case 'tournament_standings':
+          return `/cricket-t2/${language}/tournaments/${id}/standings.${format}`;
+        case 'team_profile':
+          return `/cricket-t2/${language}/teams/${id}/profile.${format}`;
+        case 'team_versus_team':
+          const teamId2 = id?.split(':')[1] || '';
+          const teamId1 = id?.split(':')[0] || '';
+          return `/cricket-t2/${language}/teams/${teamId1}/versus/${teamId2}/matches.${format}`;
+        default:
+          return `/cricket-t2/${language}/${action}.${format}`;
+      }
+    }
+    
+    // For other sports, use existing endpoints
     const sportPrefix = this.getSportPrefix(sport);
     
     switch (action) {
@@ -411,20 +448,22 @@ export class SportRadarService {
     const params: Record<string, any> = {};
     
     // Add sport-specific parameters
-    switch (sport.toLowerCase()) {
-      case 'cricket':
-        if (action === 'schedule') {
-          params.days = daysAhead;
-          if (leagueId) params.tournament_id = leagueId;
-        }
-        break;
-        
-      default:
-        if (action === 'schedule') {
-          params.days_ahead = daysAhead;
-          if (leagueId) params.league_id = leagueId;
-        }
-        break;
+    if (sport.toLowerCase() === 'cricket') {
+      // Cricket API requires api_key not as a URL parameter
+      params.api_key = this.apiKey;
+      
+      // No additional parameters needed for cricket endpoints as they're part of the URL path
+      if (action === 'schedule' && daysAhead) {
+        // This would be handled in the URL construction in getSportEndpoint
+      }
+    } else {
+      // Other sports
+      params.api_key = this.apiKey;
+      
+      if (action === 'schedule') {
+        params.days_ahead = daysAhead;
+        if (leagueId) params.league_id = leagueId;
+      }
     }
     
     return params;
@@ -450,30 +489,46 @@ export class SportRadarService {
    * @param games Cricket games data
    */
   private transformCricketGames(games: any[]): GameData[] {
-    return games.map(game => ({
-      gameId: game.id,
-      leagueId: game.tournament.id,
-      sport: 'cricket',
-      homeTeam: {
-        teamId: game.competitors[0].id,
-        name: game.competitors[0].name,
-        abbreviation: game.competitors[0].abbreviation || game.competitors[0].name.substring(0, 3).toUpperCase(),
-      },
-      awayTeam: {
-        teamId: game.competitors[1].id,
-        name: game.competitors[1].name,
-        abbreviation: game.competitors[1].abbreviation || game.competitors[1].name.substring(0, 3).toUpperCase(),
-      },
-      startTime: game.scheduled,
-      status: this.mapGameStatus(game.status),
-      venue: game.venue?.name || 'TBA',
-      scores: game.score ? {
-        homeScore: game.score.home.runs || 0,
-        awayScore: game.score.away.runs || 0,
-        period: game.score.current_inning || 1,
-        timeRemaining: game.clock || '',
-      } : undefined,
-    }));
+    if (!games || !Array.isArray(games)) {
+      console.error('Invalid or missing games data:', games);
+      return [];
+    }
+    
+    return games.map(game => {
+      try {
+        // Find home and away competitors
+        const homeTeam = game.competitors?.find((c: any) => c?.qualifier === 'home') || game.competitors?.[0];
+        const awayTeam = game.competitors?.find((c: any) => c?.qualifier === 'away') || game.competitors?.[1];
+        
+        return {
+          gameId: game.id,
+          leagueId: game.tournament?.id,
+          sport: 'cricket',
+          homeTeam: {
+            teamId: homeTeam?.id,
+            name: homeTeam?.name,
+            abbreviation: homeTeam?.abbreviation || (homeTeam?.name ? homeTeam.name.substring(0, 3).toUpperCase() : 'TBC'),
+          },
+          awayTeam: {
+            teamId: awayTeam?.id,
+            name: awayTeam?.name,
+            abbreviation: awayTeam?.abbreviation || (awayTeam?.name ? awayTeam.name.substring(0, 3).toUpperCase() : 'TBC'),
+          },
+          startTime: game.scheduled,
+          status: this.mapGameStatus(game.status),
+          venue: game.venue?.name || 'TBA',
+          scores: game.sport_event_status ? {
+            homeScore: game.sport_event_status.home_score || 0,
+            awayScore: game.sport_event_status.away_score || 0,
+            period: game.sport_event_status.current_inning || 1,
+            timeRemaining: '',
+          } : undefined,
+        };
+      } catch (error) {
+        console.error('Error transforming cricket game:', error);
+        return null;
+      }
+    }).filter(Boolean) as GameData[];
   }
   
   /**

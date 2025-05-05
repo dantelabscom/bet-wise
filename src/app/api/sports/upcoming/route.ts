@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
-    const sport = searchParams.get('sport') || 'nba';
+    const sport = searchParams.get('sport') || 'cricket';
     const leagueId = searchParams.get('leagueId') || undefined;
     const daysAhead = parseInt(searchParams.get('days') || '7', 10);
 
@@ -32,14 +32,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log(`Fetching upcoming games for ${sport}, league: ${leagueId}, days: ${daysAhead}`);
+
     // Fetch upcoming games from SportRadar service
     const result = await sportRadar.getUpcomingGames(sport, leagueId, daysAhead);
 
+    console.log(`SportRadar API response status: ${result.success ? 'Success' : 'Failed'}`);
+    
     if (!result.success) {
+      console.error('SportRadar API error:', result.error);
       return NextResponse.json(
-        { error: result.error || 'Failed to fetch upcoming games' }, 
+        { 
+          success: false,
+          error: result.error || 'Failed to fetch upcoming games',
+          details: 'The third-party sports data API returned an error'
+        }, 
         { status: 500 }
       );
+    }
+
+    // Log some basic info about the returned data
+    console.log(`Retrieved ${result.data?.length || 0} games from SportRadar API`);
+    
+    // For cricket, we need to ensure proper data transformation
+    if (sport === 'cricket' && Array.isArray(result.data)) {
+      // Log the first game to help debug
+      if (result.data.length > 0) {
+        console.log(`Sample game data: ${JSON.stringify(result.data[0], null, 2)}`);
+      }
     }
 
     // Return the data
@@ -50,7 +70,11 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching upcoming games:', error);
     return NextResponse.json(
-      { error: error.message || 'An unexpected error occurred' }, 
+      { 
+        success: false,
+        error: error.message || 'An unexpected error occurred',
+        details: error.stack || 'No stack trace available'
+      }, 
       { status: 500 }
     );
   }
