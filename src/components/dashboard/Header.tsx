@@ -30,7 +30,7 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center">
             <Link 
-              href="/dashboard" 
+              href="/" 
               className="flex items-center"
             >
               <span className="text-xl font-bold text-blue-600">JINZO</span>
