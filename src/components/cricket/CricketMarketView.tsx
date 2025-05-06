@@ -79,7 +79,9 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
         const response = await fetch(`/api/sports/cricket/match/${matchId}`);
         
         if (!response.ok) {
-          throw new Error('Failed to fetch match data');
+          const errorData = await response.json().catch(() => ({}));
+          console.error('API response error:', errorData);
+          throw new Error(errorData.error || `Server error: ${response.status}`);
         }
         
         const data = await response.json();
@@ -88,11 +90,25 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
           throw new Error(data.error || 'Failed to fetch match data');
         }
         
+        // Validate required data exists
+        if (!data.data) {
+          throw new Error('No match data returned from the API');
+        }
+        
         setMatch(data.data);
         
-        // Set default selected team
-        if (data.data.teams && data.data.teams.length > 0) {
+        // Set default selected team only if teams are available and valid
+        if (data.data.teams && Array.isArray(data.data.teams) && data.data.teams.length > 0) {
           setSelectedTeam(data.data.teams[0]);
+          
+          // Calculate initial price based on team
+          const probability = calculateTeamProbability(data.data.teams[0]);
+          const price = getPriceFromProbability(probability);
+          setCurrentPrice(price);
+        } else {
+          console.warn('No teams data available in the match response');
+          // Set a default team name if teams data is missing
+          setSelectedTeam("Home Team");
         }
         
         // Extract scorecard if available
@@ -119,22 +135,24 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
   
   // Calculate team probability based on real match data
   const calculateTeamProbability = (teamName: string): number => {
-    if (!match || !match.score || match.score.length === 0) return 0.5;
+    if (!match || !teamName) return 0.5;
+    if (!match.score || match.score.length === 0) return 0.5;
     
-    // Find team's score
-    const teamScore = match.score.find(s => s.inning.includes(teamName));
+    // Find team's score - safely handle undefined data
+    const teamScore = match.score.find(s => s.inning && s.inning.includes(teamName));
     if (!teamScore) return 0.5;
     
     // Basic algorithm to calculate probability based on score, wickets, and match status
     let probability = 0.5; // Default even probability
     
     // If match is in progress, adjust probability based on score and wickets
-    if (match.status.toLowerCase().includes('progress')) {
-      const otherTeam = match.teams.find(t => t !== teamName);
-      const otherTeamScore = otherTeam ? match.score.find(s => s.inning.includes(otherTeam)) : null;
+    if (match.status && match.status.toLowerCase().includes('progress')) {
+      const otherTeams = match.teams ? match.teams.filter(t => t !== teamName) : [];
+      const otherTeam = otherTeams.length > 0 ? otherTeams[0] : null;
+      const otherTeamScore = otherTeam ? match.score.find(s => s.inning && s.inning.includes(otherTeam)) : null;
       
-      // Calculate total runs
-      const totalRuns = match.score.reduce((sum, s) => sum + s.r, 0);
+      // Calculate total runs - safely handle potentially undefined values
+      const totalRuns = match.score.reduce((sum, s) => sum + (s.r || 0), 0);
       
       if (totalRuns > 0 && teamScore.r > 0) {
         // Base probability on proportion of runs scored
@@ -147,7 +165,7 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
         
         // Adjust based on overs - more overs played increases probability
         if (teamScore.o > 0 && match.score.length > 1) {
-          const totalOvers = match.score.reduce((sum, s) => sum + s.o, 0);
+          const totalOvers = match.score.reduce((sum, s) => sum + (s.o || 0), 0);
           probability += (teamScore.o / totalOvers) * 0.1;
         }
       }
@@ -155,12 +173,12 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
       // Compare with other team if available
       if (otherTeamScore) {
         // If this team has scored more, increase probability
-        if (teamScore.r > otherTeamScore.r) {
+        if ((teamScore.r || 0) > (otherTeamScore.r || 0)) {
           probability += 0.1;
         }
         
         // If this team has lost fewer wickets, increase probability
-        if (teamScore.w < otherTeamScore.w) {
+        if ((teamScore.w || 0) < (otherTeamScore.w || 0)) {
           probability += 0.05;
         }
       }
@@ -198,6 +216,8 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
   
   // Get short team name
   const getShortTeamName = (teamName: string): string => {
+    if (!teamName) return 'TBD';
+    
     if (match?.teamInfo) {
       const team = match.teamInfo.find(t => t.name === teamName);
       if (team) return team.shortname;
@@ -214,7 +234,7 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
     const currentInnings = match.score[match.score.length - 1];
     if (!currentInnings || !currentInnings.o || currentInnings.o === 0) return "0.00";
     
-    const runRate = currentInnings.r / currentInnings.o;
+    const runRate = (currentInnings.r || 0) / currentInnings.o;
     return runRate.toFixed(2);
   };
   
@@ -345,7 +365,11 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{match.teams[0]} vs {match.teams[1]}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {match.teams && match.teams.length >= 2 
+                ? `${match.teams[0]} vs ${match.teams[1]}`
+                : match.name || 'Match Details'}
+            </h1>
             <div className="text-sm text-gray-600 mt-1">{match.matchType} • {match.venue}</div>
           </div>
           <div className="text-right">
@@ -384,13 +408,15 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
           {/* Market question */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-gray-900">
-              {match.teams[0]} to win the match vs {match.teams[1]}?
+              {match.teams && match.teams.length >= 2 
+                ? `${match.teams[0]} to win the match vs ${match.teams[1]}?`
+                : 'Who will win this match?'}
             </h2>
             
             <div className="mt-6">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Select Team</h3>
               <div className="flex space-x-4">
-                {match.teams.map((team) => {
+                {match.teams && match.teams.length > 0 ? match.teams.map((team) => {
                   const teamProb = calculateTeamProbability(team);
                   const teamPrice = getPriceFromProbability(teamProb);
                   
@@ -411,7 +437,11 @@ export default function CricketMarketView({ matchId }: CricketMarketViewProps) {
                       </div>
                     </button>
                   );
-                })}
+                }) : (
+                  <div className="w-full text-center p-4 bg-gray-50 rounded-md">
+                    <p className="text-gray-500">Team information not available</p>
+                  </div>
+                )}
               </div>
             </div>
             

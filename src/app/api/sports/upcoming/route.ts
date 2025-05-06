@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { sportRadar } from '@/lib/services/sports-data/sportradar';
+import { sportMonksCricket } from '@/lib/services/sports-data/sportmonks-cricket';
 
 /**
  * @route GET /api/sports/upcoming
@@ -34,13 +35,21 @@ export async function GET(request: NextRequest) {
 
     console.log(`Fetching upcoming games for ${sport}, league: ${leagueId}, days: ${daysAhead}`);
 
-    // Fetch upcoming games from SportRadar service
-    const result = await sportRadar.getUpcomingGames(sport, leagueId, daysAhead);
+    let result;
+    
+    // Use the appropriate service based on the sport
+    if (sport === 'cricket') {
+      // Use SportMonks for cricket data
+      result = await fetchCricketData(daysAhead, leagueId);
+    } else {
+      // Use SportRadar for other sports
+      result = await sportRadar.getUpcomingGames(sport, leagueId, daysAhead);
+    }
 
-    console.log(`SportRadar API response status: ${result.success ? 'Success' : 'Failed'}`);
+    console.log(`API response status: ${result.success ? 'Success' : 'Failed'}`);
     
     if (!result.success) {
-      console.error('SportRadar API error:', result.error);
+      console.error('API error:', result.error);
       return NextResponse.json(
         { 
           success: false,
@@ -52,16 +61,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Log some basic info about the returned data
-    console.log(`Retrieved ${result.data?.length || 0} games from SportRadar API`);
+    console.log(`Retrieved ${result.data?.length || 0} games`);
     
-    // For cricket, we need to ensure proper data transformation
-    if (sport === 'cricket' && Array.isArray(result.data)) {
-      // Log the first game to help debug
-      if (result.data.length > 0) {
-        console.log(`Sample game data: ${JSON.stringify(result.data[0], null, 2)}`);
-      }
-    }
-
     // Return the data
     return NextResponse.json({
       success: true,
@@ -77,5 +78,69 @@ export async function GET(request: NextRequest) {
       }, 
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Fetch cricket data using SportMonks
+ */
+async function fetchCricketData(daysAhead: number, leagueId?: string) {
+  try {
+    const includes = ['localteam', 'visitorteam', 'venue', 'league'];
+    
+    // Add league filter if provided
+    const upcomingMatchesResult = await sportMonksCricket.getUpcomingFixtures(
+      daysAhead, 
+      includes
+    );
+    
+    if (!upcomingMatchesResult.success) {
+      return upcomingMatchesResult;
+    }
+    
+    // Filter by league if provided
+    let fixtures = upcomingMatchesResult.data;
+    if (leagueId && Array.isArray(fixtures)) {
+      fixtures = fixtures.filter(fixture => 
+        fixture.league_id?.toString() === leagueId ||
+        fixture.league?.id?.toString() === leagueId
+      );
+    }
+    
+    // Transform data to standard format
+    const transformedFixtures = Array.isArray(fixtures)
+      ? fixtures.map(fixture => {
+          const transformed = sportMonksCricket.transformToStandardFormat(fixture);
+          
+          // Adapt to expected format for admin interface
+          return {
+            gameId: transformed.id,
+            homeTeam: {
+              name: transformed.teams[0] || 'Home Team',
+              id: fixture.localteam_id
+            },
+            awayTeam: {
+              name: transformed.teams[1] || 'Away Team',
+              id: fixture.visitorteam_id
+            },
+            startTime: transformed.date,
+            status: transformed.status,
+            leagueId: fixture.league?.id || fixture.league_id || 'unknown',
+            leagueName: fixture.league?.name || 'Unknown League'
+          };
+        })
+      : [];
+    
+    return {
+      success: true,
+      data: transformedFixtures
+    };
+  } catch (error: any) {
+    console.error('Error fetching cricket data from SportMonks:', error);
+    return {
+      success: false,
+      data: null,
+      error: error.message || 'Failed to fetch cricket data'
+    };
   }
 } 

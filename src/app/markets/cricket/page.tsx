@@ -23,12 +23,12 @@ interface CricketMatch {
 
 export default function CricketMarketsPage() {
   const { data: session } = useSession();
+  
   const [matches, setMatches] = useState<CricketMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
   
-  // Fetch cricket matches
   useEffect(() => {
     const fetchMatches = async () => {
       if (!session?.user) return;
@@ -37,7 +37,8 @@ export default function CricketMarketsPage() {
       setError(null);
       
       try {
-        const response = await fetch('/api/sports/cricket/matches');
+        // Use the new API endpoint with the right type parameter
+        const response = await fetch(`/api/sports/cricket/matches?type=${filter}`);
         
         if (!response.ok) {
           throw new Error('Failed to fetch cricket matches');
@@ -59,32 +60,22 @@ export default function CricketMarketsPage() {
     };
     
     fetchMatches();
-    
-    // Refresh data every 60 seconds
-    const interval = setInterval(() => {
-      fetchMatches();
-    }, 60000);
-    
-    return () => clearInterval(interval);
-  }, [session]);
+  }, [session, filter]);
   
-  // Filter matches
-  const filteredMatches = matches.filter(match => {
-    if (filter === 'all') return true;
-    if (filter === 'live') return match.status.toLowerCase().includes('progress');
-    if (filter === 'upcoming') return match.status.toLowerCase().includes('upcoming') || match.status.toLowerCase().includes('not started');
-    if (filter === 'completed') return match.status.toLowerCase().includes('complete');
-    return true;
-  });
-  
-  // Format date
-  const formatMatchDate = (dateString: string) => {
+  const formatMatchDate = (dateStr: string) => {
     try {
-      const date = parseISO(dateString);
+      const date = parseISO(dateStr);
       return format(date, 'MMM d, yyyy h:mm a');
-    } catch (e) {
-      return dateString;
+    } catch (err) {
+      return dateStr;
     }
+  };
+  
+  // Filter matches by status for display
+  const filteredMatches = matches;
+  
+  const setMatchFilter = (newFilter: string) => {
+    setFilter(newFilter);
   };
   
   if (isLoading) {
@@ -113,46 +104,37 @@ export default function CricketMarketsPage() {
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Cricket Markets</h1>
+        
         <div className="flex space-x-2">
-          <button 
-            onClick={() => setFilter('all')}
-            className={`px-4 py-2 text-sm rounded-md ${
+          <button
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
               filter === 'all' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-blue-500 text-white' 
+                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
             }`}
+            onClick={() => setMatchFilter('all')}
           >
             All
           </button>
-          <button 
-            onClick={() => setFilter('live')}
-            className={`px-4 py-2 text-sm rounded-md ${
+          <button
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
               filter === 'live' 
-                ? 'bg-green-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-green-500 text-white' 
+                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
             }`}
+            onClick={() => setMatchFilter('live')}
           >
             Live
           </button>
-          <button 
-            onClick={() => setFilter('upcoming')}
-            className={`px-4 py-2 text-sm rounded-md ${
+          <button
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
               filter === 'upcoming' 
-                ? 'bg-yellow-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-yellow-500 text-white' 
+                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
             }`}
+            onClick={() => setMatchFilter('upcoming')}
           >
             Upcoming
-          </button>
-          <button 
-            onClick={() => setFilter('completed')}
-            className={`px-4 py-2 text-sm rounded-md ${
-              filter === 'completed' 
-                ? 'bg-gray-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            Completed
           </button>
         </div>
       </div>
@@ -189,7 +171,9 @@ export default function CricketMarketsPage() {
                 </div>
                 
                 <h2 className="text-lg font-bold text-gray-900 mb-2">
-                  {match.teams[0]} vs {match.teams[1]}
+                  {match.teams && match.teams.length >= 2 
+                    ? `${match.teams[0]} vs ${match.teams[1]}`
+                    : match.name || 'Match Details'}
                 </h2>
                 
                 <div className="text-sm text-gray-600 mb-3">
@@ -213,22 +197,11 @@ export default function CricketMarketsPage() {
                   </div>
                 )}
                 
-                <div className="flex justify-between items-center mt-4">
-                  <div className="text-sm text-gray-600">
-                    {match.status.toLowerCase().includes('progress') ? (
-                      <span className="font-medium text-green-600">Trading Live</span>
-                    ) : match.status.toLowerCase().includes('complete') ? (
-                      <span className="font-medium text-blue-600">Settled</span>
-                    ) : (
-                      <span className="font-medium text-yellow-600">Open for Trading</span>
-                    )}
-                  </div>
-                  <div className="flex items-center text-blue-600 hover:text-blue-800">
-                    <span className="text-sm font-medium">View Markets</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
+                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Trade Now</span>
+                  <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
               </div>
             </Link>

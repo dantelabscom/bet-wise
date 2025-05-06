@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { cricApi } from '@/lib/services/sports-data/cricapi';
+import { sportMonksCricket } from '@/lib/services/sports-data/sportmonks-cricket';
 
 /**
  * @route GET /api/sports/cricket/matches
- * @desc Get current cricket matches
+ * @desc Get live and upcoming cricket matches
  * @access Private
  */
 export async function GET(request: NextRequest) {
@@ -18,34 +18,93 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Parse query parameters
+    // Get query parameters
     const searchParams = request.nextUrl.searchParams;
-    const offset = parseInt(searchParams.get('offset') || '0');
-
-    // Fetch current cricket matches
-    const result = await cricApi.getCurrentMatches(offset);
-
-    if (!result.success) {
+    const type = searchParams.get('type') || 'all'; // all, live, upcoming
+    const days = parseInt(searchParams.get('days') || '7', 10);
+    
+    console.log(`Fetching cricket matches - type: ${type}, days ahead: ${days}`);
+    
+    try {
+      let matches = [];
+      
+      // First get live matches
+      const liveMatchesResult = await sportMonksCricket.getLiveMatches([
+        'localteam', 
+        'visitorteam', 
+        'runs', 
+        'venue'
+      ]);
+      
+      if (liveMatchesResult.success && liveMatchesResult.data) {
+        const liveMatches = Array.isArray(liveMatchesResult.data) 
+          ? liveMatchesResult.data 
+          : [liveMatchesResult.data];
+          
+        const formattedLiveMatches = liveMatches.map(match => 
+          sportMonksCricket.transformToStandardFormat(match)
+        );
+        
+        matches.push(...formattedLiveMatches);
+      }
+      
+      // Add upcoming matches if requested
+      if (type === 'all' || type === 'upcoming') {
+        const upcomingMatchesResult = await sportMonksCricket.getUpcomingFixtures(
+          days, 
+          ['localteam', 'visitorteam', 'venue']
+        );
+        
+        if (upcomingMatchesResult.success && upcomingMatchesResult.data) {
+          const upcomingMatches = Array.isArray(upcomingMatchesResult.data)
+            ? upcomingMatchesResult.data
+            : [upcomingMatchesResult.data];
+            
+          const formattedUpcomingMatches = upcomingMatches
+            .filter(match => match.status !== 'Finished') // Filter out finished matches
+            .map(match => sportMonksCricket.transformToStandardFormat(match));
+          
+          matches.push(...formattedUpcomingMatches);
+        }
+      }
+      
+      // Filter matches if requested
+      if (type === 'live') {
+        matches = matches.filter(match => 
+          match.status.toLowerCase().includes('progress') || 
+          match.status.toLowerCase() === 'in progress'
+        );
+      } else if (type === 'upcoming') {
+        matches = matches.filter(match => 
+          !match.status.toLowerCase().includes('progress') && 
+          match.status.toLowerCase() !== 'completed' &&
+          match.status.toLowerCase() !== 'in progress'
+        );
+      }
+      
+      return NextResponse.json({
+        success: true,
+        data: matches
+      });
+    } catch (apiError: any) {
+      console.error('Error calling SportMonks API:', apiError);
       return NextResponse.json(
-        { error: result.error || 'Failed to fetch cricket matches' }, 
+        { 
+          success: false,
+          error: apiError.message || 'API service error',
+          details: apiError.stack || 'No stack trace available'
+        }, 
         { status: 500 }
       );
     }
-
-    // Transform data to our standard format if needed
-    const transformedData = Array.isArray(result.data) 
-      ? result.data.map(match => cricApi.transformToStandardFormat(match))
-      : result.data;
-
-    // Return the data
-    return NextResponse.json({
-      success: true,
-      data: transformedData
-    });
   } catch (error: any) {
     console.error('Error fetching cricket matches:', error);
     return NextResponse.json(
-      { error: error.message || 'An unexpected error occurred' }, 
+      { 
+        success: false,
+        error: error.message || 'An unexpected error occurred',
+        details: error.stack || 'No stack trace available'
+      }, 
       { status: 500 }
     );
   }

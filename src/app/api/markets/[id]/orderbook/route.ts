@@ -20,7 +20,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
     
-    const { id } = params;
+    // Await params before accessing its properties
+    const awaitedParams = await params;
+    const { id } = awaitedParams;
     
     if (!id || isNaN(Number(id))) {
       return NextResponse.json(
