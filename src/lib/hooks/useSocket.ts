@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import io from 'socket.io-client';
 
-let socketInstance: any = null;
+let socketInstance: ReturnType<typeof io> | null = null;
 let socketInitialized = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 2000;
 
 /**
  * Custom hook for using Socket.IO across the app
@@ -10,77 +13,107 @@ let socketInitialized = false;
  */
 export function useSocket() {
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  
-  useEffect(() => {
-    // Only create a socket if one doesn't already exist
+  const [error, setError] = useState<string | null>(null);
+
+  const initializeSocket = useCallback(() => {
     if (!socketInstance && !socketInitialized) {
-      socketInitialized = true; // Prevent double initialization
-      
+      socketInitialized = true;
       console.log('Initializing socket connection...');
-      
-      // Create the socket connection
+
+      // Connect directly to the server without going through the API route
       socketInstance = io(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000', {
         path: '/api/socketio',
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1000,
+        reconnection: true,
+        reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+        reconnectionDelay: RECONNECT_DELAY,
         timeout: 10000,
+        transports: ['polling', 'websocket'],
         autoConnect: true,
         forceNew: false,
       });
     }
+    return socketInstance;
+  }, []);
+
+  const handleReconnect = useCallback(() => {
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectAttempts++;
+      console.log(`Attempting to reconnect socket... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      
+      setTimeout(() => {
+        if (socketInstance) {
+          socketInstance.connect();
+        }
+      }, RECONNECT_DELAY);
+    } else {
+      setError('Maximum reconnection attempts reached. Please refresh the page.');
+      socketInitialized = false;
+      if (socketInstance) {
+        socketInstance.disconnect();
+      }
+      socketInstance = null;
+      reconnectAttempts = 0;
+    }
+  }, []);
+
+  useEffect(() => {
+    const socket = initializeSocket();
     
-    if (!socketInstance) {
-      console.error('Failed to initialize socket');
+    if (!socket) {
+      setError('Failed to initialize socket');
       return;
     }
-    
-    // Set up event listeners
+
     const onConnect = () => {
       console.log('Socket connected successfully');
       setIsConnected(true);
+      setError(null);
+      reconnectAttempts = 0;
     };
-    
+
     const onDisconnect = (reason: string) => {
       console.log(`Socket disconnected: ${reason}`);
       setIsConnected(false);
-    };
-    
-    const onConnectError = (err: any) => {
-      console.error('Socket connection error:', err);
-      // If we have too many connection errors, reset the socket
-      if (!isConnected) {
-        setTimeout(() => {
-          console.log('Attempting to reconnect socket...');
-          socketInstance?.connect();
-        }, 3000);
+      
+      if (reason === 'io server disconnect') {
+        // Server initiated disconnect, attempt to reconnect
+        handleReconnect();
       }
     };
-    
-    const onError = (err: any) => {
-      console.error('Socket error:', err);
+
+    const onConnectError = (err: Error) => {
+      console.error('Socket connection error:', err);
+      setError(err.message);
+      setIsConnected(false);
+      handleReconnect();
     };
-    
+
+    const onError = (err: Error) => {
+      console.error('Socket error:', err);
+      setError(err.message);
+    };
+
     // Register event listeners
-    socketInstance.on('connect', onConnect);
-    socketInstance.on('disconnect', onDisconnect);
-    socketInstance.on('connect_error', onConnectError);
-    socketInstance.on('error', onError);
-    
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('connect_error', onConnectError);
+    socket.on('error', onError);
+
     // If the socket is already connected, set state immediately
-    if (socketInstance.connected) {
+    if (socket.connected) {
       setIsConnected(true);
-    } else if (!socketInstance.connected && !socketInstance.connecting) {
-      socketInstance.connect();
+    } else {
+      socket.connect();
     }
-    
+
     // Clean up event listeners on unmount
     return () => {
-      socketInstance?.off('connect', onConnect);
-      socketInstance?.off('disconnect', onDisconnect);
-      socketInstance?.off('connect_error', onConnectError);
-      socketInstance?.off('error', onError);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('connect_error', onConnectError);
+      socket.off('error', onError);
     };
-  }, [isConnected]);
-  
-  return socketInstance;
+  }, [initializeSocket, handleReconnect]);
+
+  return { socket: socketInstance, isConnected, error };
 } 

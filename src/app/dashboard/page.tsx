@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardHeader from '@/components/dashboard/Header';
-import MarketList from '@/components/dashboard/MarketList';
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
@@ -40,7 +39,7 @@ export default function DashboardPage() {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Welcome, {session.user.name || 'Trader'}</h1>
-          <p className="text-gray-600">Explore markets and start trading</p>
+          <p className="text-gray-600">Explore cricket markets and start trading</p>
         </div>
         
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -83,13 +82,22 @@ export default function DashboardPage() {
         
         <div className="mt-8">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Popular Markets</h2>
-            <Link href="/markets" className="text-blue-600 hover:underline">
-              View All Markets
+            <h2 className="text-xl font-semibold">Cricket Markets</h2>
+            <Link href="/markets/cricket" className="text-blue-600 hover:underline">
+              View All Cricket Markets
             </Link>
           </div>
           
-          <MarketList />
+          <div className="rounded-lg bg-white p-6 shadow-md">
+            <p className="text-center py-8">
+              <Link 
+                href="/markets/cricket" 
+                className="inline-block rounded-md bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
+              >
+                Explore Cricket Markets
+              </Link>
+            </p>
+          </div>
         </div>
       </main>
     </div>

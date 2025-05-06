@@ -9,7 +9,6 @@ export default function DashboardHeader() {
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [sportsMenuOpen, setSportsMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/' });
@@ -21,19 +20,18 @@ export default function DashboardHeader() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       // Close menus when clicking outside of them
-      if (profileMenuOpen || sportsMenuOpen) {
+      if (profileMenuOpen) {
         const target = event.target as HTMLElement;
         
-        if (!target.closest('.profile-menu') && !target.closest('.sports-menu')) {
+        if (!target.closest('.profile-menu')) {
           setProfileMenuOpen(false);
-          setSportsMenuOpen(false);
         }
       }
     };
     
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [profileMenuOpen, sportsMenuOpen]);
+  }, [profileMenuOpen]);
 
   return (
     <header className="bg-white shadow-sm">
@@ -44,7 +42,7 @@ export default function DashboardHeader() {
               href="/" 
               className="flex items-center"
             >
-              <span className="text-xl font-bold text-blue-600">BetWise</span>
+              <span className="text-xl font-bold text-blue-600">Cricket Trading</span>
             </Link>
             
             <nav className="ml-10 hidden space-x-8 md:flex">
@@ -55,37 +53,11 @@ export default function DashboardHeader() {
                 Dashboard
               </Link>
               <Link 
-                href="/markets" 
+                href="/markets/cricket" 
                 className="text-gray-500 hover:text-blue-600"
               >
-                Markets
+                Cricket Markets
               </Link>
-              <div className="relative sports-menu">
-                <button 
-                  onClick={() => setSportsMenuOpen(!sportsMenuOpen)}
-                  className="text-gray-500 hover:text-blue-600 flex items-center"
-                >
-                  Sports <ChevronDown size={16} className="ml-1" />
-                </button>
-                {sportsMenuOpen && (
-                  <div className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20">
-                    <Link 
-                      href="/sports" 
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setSportsMenuOpen(false)}
-                    >
-                      All Sports
-                    </Link>
-                    <Link 
-                      href="/markets/cricket" 
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setSportsMenuOpen(false)}
-                    >
-                      Cricket
-                    </Link>
-                  </div>
-                )}
-              </div>
               <Link 
                 href="/positions" 
                 className="text-gray-500 hover:text-blue-600"
@@ -167,22 +139,8 @@ export default function DashboardHeader() {
               Dashboard
             </Link>
             <Link 
-              href="/markets" 
-              className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Markets
-            </Link>
-            <Link 
-              href="/sports" 
-              className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Sports
-            </Link>
-            <Link 
               href="/markets/cricket" 
-              className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100 pl-6"
+              className="block rounded-md px-3 py-2 text-base font-medium text-gray-500 hover:bg-gray-100"
               onClick={() => setMobileMenuOpen(false)}
             >
               Cricket Markets

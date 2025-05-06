@@ -41,7 +41,7 @@ interface PricePoint {
 }
 
 export default function PriceChart({ marketId, marketName }: PriceChartProps) {
-  const socket = useSocket();
+  const { socket, isConnected } = useSocket();
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [timeRange, setTimeRange] = useState<'5m' | '15m' | '1h' | 'all'>('15m');
   
@@ -55,7 +55,7 @@ export default function PriceChart({ marketId, marketName }: PriceChartProps) {
   
   // Listen for price updates
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !isConnected) return;
     
     // Join the market room
     socket.emit('join:market', marketId);
@@ -87,7 +87,7 @@ export default function PriceChart({ marketId, marketName }: PriceChartProps) {
       socket.off('orderbook:update', handlePriceUpdate);
       socket.off('price:update', handlePriceUpdate);
     };
-  }, [socket, marketId]);
+  }, [socket, isConnected, marketId]);
   
   // Filter price history based on selected time range
   const getFilteredPriceHistory = () => {
@@ -165,7 +165,10 @@ export default function PriceChart({ marketId, marketName }: PriceChartProps) {
         },
         ticks: {
           callback: function(value) {
-            return value.toFixed(2);
+            if (typeof value === 'number') {
+              return value.toFixed(2);
+            }
+            return value;
           }
         }
       }

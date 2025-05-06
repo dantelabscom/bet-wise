@@ -158,7 +158,7 @@ export default function PositionsPage() {
                           {parseFloat(position.quantity).toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          ${parseFloat(position.averagePrice).toFixed(2)}
+                          ${parseFloat(position.metrics.averagePrice).toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           ${parseFloat(position.marketOption?.currentPrice || '0').toFixed(2)}

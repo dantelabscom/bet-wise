@@ -133,4 +133,24 @@ pub fn calculate_implied_probability(odds: Decimal) -> Decimal {
     }
     
     Decimal::new(1, 0) / odds
+}
+
+// Add SQLx implementations for MarketStatus
+impl sqlx::Type<sqlx::Postgres> for MarketStatus {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("text")
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for MarketStatus {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        match s {
+            "open" => Ok(MarketStatus::Open),
+            "suspended" => Ok(MarketStatus::Suspended),
+            "closed" => Ok(MarketStatus::Closed),
+            "cancelled" => Ok(MarketStatus::Cancelled),
+            _ => Err(format!("Unknown market status: {}", s).into()),
+        }
+    }
 } 

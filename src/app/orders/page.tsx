@@ -142,12 +142,12 @@ export default function OrdersPage() {
       
       // Refresh orders
       setOrders(orders.map(order => 
-        order.id === orderId ? { ...order, status: 'cancelled' } : order
+        order.id === String(orderId) ? { ...order, status: 'cancelled' } : order
       ));
       
       // Update statistics
       calculateOrderStats(orders.map(order => 
-        order.id === orderId ? { ...order, status: 'cancelled' } : order
+        order.id === String(orderId) ? { ...order, status: 'cancelled' } : order
       ));
     } catch (error) {
       console.error('Error cancelling order:', error);
@@ -402,12 +402,13 @@ export default function OrdersPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         {(order.status === 'open' || order.status === 'partially_filled') && (
                           <button
-                            onClick={() => handleCancelOrder(order.id)}
+                            onClick={() => handleCancelOrder(Number(order.id))}
                             className="text-red-600 hover:text-red-900"
                           >
                             Cancel
                           </button>
                         )}
+                        ){'}'}
                         <Link
                           href={`/markets/${order.marketId}/trade`}
                           className="text-blue-600 hover:text-blue-900 ml-4"

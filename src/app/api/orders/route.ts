@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { createOrder, getUserOrders, cancelOrder } from '@/lib/services/order-matching';
 import { Order, OrderCreationParams } from '@/lib/models/order';
+import { tradingEngineClient } from '@/lib/clients/trading-engine-client';
+
+// Feature flag to control whether to use the Rust trading engine
+const USE_RUST_ENGINE = process.env.USE_RUST_ENGINE === 'true';
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,7 +78,40 @@ export async function POST(request: NextRequest) {
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
     };
     
-    // Create order
+    // Use Rust trading engine if feature flag is enabled
+    if (USE_RUST_ENGINE) {
+      try {
+        // Format parameters for Rust engine
+        const rustOrderParams = {
+          user_id: session.user.id,
+          market_id: parseInt(body.marketId),
+          market_option_id: parseInt(body.marketOptionId),
+          order_type: body.type || 'limit',
+          side: body.side,
+          price: body.price || '0',
+          quantity: body.quantity,
+          expires_at: body.expiresAt || null,
+        };
+        
+        // Call Rust trading engine
+        const result = await tradingEngineClient.createOrder(rustOrderParams);
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to create order in trading engine');
+        }
+        
+        return NextResponse.json({ 
+          order: result.data,
+          engine: 'rust'
+        });
+      } catch (error: any) {
+        console.error('Error using Rust trading engine:', error);
+        // Fall back to TypeScript implementation
+        console.log('Falling back to TypeScript implementation');
+      }
+    }
+    
+    // Default to TypeScript implementation
     const order = await createOrder(orderParams);
     
     if (!order) {
@@ -84,7 +121,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    return NextResponse.json({ order });
+    return NextResponse.json({ 
+      order,
+      engine: 'typescript'
+    });
   } catch (error: any) {
     console.error('Error creating order:', error);
     return NextResponse.json(

@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     // Get user positions
     const userPositions = await db.select()
       .from(positions)
-      .where(eq(positions.userId, session.user.email)) as Position[];
+      .where(eq(positions.userId, session.user.email)) as unknown as Position[];
     
     // Calculate metrics
     let totalPnL = 0;

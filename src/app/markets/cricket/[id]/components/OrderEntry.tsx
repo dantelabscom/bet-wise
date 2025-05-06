@@ -15,7 +15,7 @@ interface OrderEntryProps {
 
 export default function OrderEntry({ matchId, marketId, marketName }: OrderEntryProps) {
   const { data: session } = useSession();
-  const socket = useSocket();
+  const { socket, isConnected } = useSocket();
   
   // Order state
   const [side, setSide] = useState<'yes' | 'no'>('yes');
@@ -35,7 +35,7 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
   
   // Connect to market updates via WebSocket
   useEffect(() => {
-    if (!socket || !marketId) return;
+    if (!socket || !isConnected || !marketId) return;
     
     // Join this market's room
     socket.emit('join:market', marketId);
@@ -71,7 +71,7 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
       socket.off('price:update');
       socket.off('error');
     };
-  }, [socket, marketId, side]);
+  }, [socket, isConnected, marketId, side]);
   
   // Handle order submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -108,23 +108,27 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
     
     try {
       // Send order via WebSocket
-      socket.emit('place:order', {
-        marketId,
-        side,
-        price,
-        quantity,
-        userId: session.user.id
-      });
-      
-      // Show success message
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-      
-      // Reset form
-      setQuantity(10);
-      
-      // Update mock wallet (in a real app, this would be done by the server)
-      setWallet(prev => prev - risk);
+      if (socket && isConnected) {
+        socket.emit('place:order', {
+          marketId,
+          side,
+          price,
+          quantity,
+          userId: session.user.id
+        });
+        
+        // Show success message
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+        
+        // Reset form
+        setQuantity(10);
+        
+        // Update mock wallet (in a real app, this would be done by the server)
+        setWallet(prev => prev - risk);
+      } else {
+        setError('Socket connection not available');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to place order');
     } finally {

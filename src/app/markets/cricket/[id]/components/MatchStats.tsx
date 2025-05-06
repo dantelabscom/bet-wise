@@ -34,7 +34,7 @@ interface MatchStatsProps {
 }
 
 export default function MatchStats({ matchId }: MatchStatsProps) {
-  const socket = useSocket();
+  const { socket, isConnected } = useSocket();
   const [battingTeam, setBattingTeam] = useState<TeamStats | null>(null);
   const [bowlingTeam, setBowlingTeam] = useState<TeamStats | null>(null);
   const [batsmen, setBatsmen] = useState<BatsmanStats[]>([]);
@@ -70,7 +70,7 @@ export default function MatchStats({ matchId }: MatchStatsProps) {
     fetchMatchStats();
     
     // Listen for live updates
-    if (socket) {
+    if (socket && isConnected) {
       socket.emit('join:match', matchId);
       
       socket.on('match:update', (data: { matchId: string; battingTeam: React.SetStateAction<TeamStats | null>; bowlingTeam: React.SetStateAction<TeamStats | null>; batsmen: React.SetStateAction<BatsmanStats[]>; bowlers: React.SetStateAction<BowlerStats[]>; }) => {
@@ -86,7 +86,7 @@ export default function MatchStats({ matchId }: MatchStatsProps) {
         socket.off('match:update');
       };
     }
-  }, [matchId, socket]);
+  }, [matchId, socket, isConnected]);
   
   // Set mock data if API fails
   const setMockData = () => {

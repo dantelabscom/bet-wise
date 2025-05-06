@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_TRADING_ENGINE_URL=http://trading-engine:8080/api/v1
+      - NEXT_PUBLIC_TRADING_ENGINE_WS_URL=ws://trading-engine:8080/ws
+      - USE_RUST_ENGINE=true
+    depends_on:
+      - trading-engine
+      - postgres
+    networks:
+      - betwise-network
+
+  trading-engine:
+    build:
+      context: ./rust-trading-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/trading_db
+      - DB_MAX_CONNECTIONS=20
+      - SERVER_WORKERS=4
+    depends_on:
+      - postgres
+    networks:
+      - betwise-network
+
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=trading_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./rust-trading-engine/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - betwise-network
+
+volumes:
+  postgres-data:
+
+networks:
+  betwise-network:
+    driver: bridge 

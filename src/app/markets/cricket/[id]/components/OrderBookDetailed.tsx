@@ -21,14 +21,14 @@ interface OrderBookDetailedProps {
 }
 
 export default function OrderBookDetailed({ marketId }: OrderBookDetailedProps) {
-  const socket = useSocket();
+  const { socket, isConnected } = useSocket();
   const [orderBook, setOrderBook] = useState<OrderBookData | null>(null);
   const [selectedSide, setSelectedSide] = useState<'yes' | 'no'>('yes');
   const [loading, setLoading] = useState(true);
   
   // Connect to market updates via WebSocket
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !isConnected) return;
     
     // Join this market's room
     socket.emit('join:market', marketId);
@@ -47,7 +47,7 @@ export default function OrderBookDetailed({ marketId }: OrderBookDetailedProps) 
     return () => {
       socket.off('orderbook:update', handleOrderBookUpdate);
     };
-  }, [socket, marketId]);
+  }, [socket, isConnected, marketId]);
   
   // Calculate maximum quantity for scaling
   const getMaxQuantity = () => {

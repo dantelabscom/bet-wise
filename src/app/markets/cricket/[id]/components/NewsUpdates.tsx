@@ -17,7 +17,7 @@ interface NewsUpdatesProps {
 }
 
 export default function NewsUpdates({ matchId }: NewsUpdatesProps) {
-  const socket = useSocket();
+  const { socket, isConnected } = useSocket();
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -45,7 +45,7 @@ export default function NewsUpdates({ matchId }: NewsUpdatesProps) {
     fetchNews();
     
     // Listen for live updates
-    if (socket) {
+    if (socket && isConnected) {
       socket.emit('join:match', matchId);
       
       socket.on('news:update', (data: { matchId: string; news: NewsItem }) => {
@@ -58,7 +58,7 @@ export default function NewsUpdates({ matchId }: NewsUpdatesProps) {
         socket.off('news:update');
       };
     }
-  }, [matchId, socket]);
+  }, [matchId, socket, isConnected]);
   
   // Set mock news if API fails
   const setMockNews = () => {

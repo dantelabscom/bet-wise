@@ -1,6 +1,9 @@
-import { orderBookService } from './order-book-service';
+import { OrderMatcher } from '../orderbook/order-matcher';
 import { webSocketService } from '../websocket/socket-service';
 import { v4 as uuidv4 } from 'uuid';
+
+// Create an instance of the order matcher
+const orderMatcher = new OrderMatcher();
 
 /**
  * Market types for cricket
@@ -97,8 +100,7 @@ export class MarketService {
     // Store the market
     this.markets.set(id, market);
     
-    // Create order book for this market
-    orderBookService.createOrderBook(id);
+    // No need to create order book here - it will be created when first order is placed
     
     console.log(`Created market: ${name} (${id}) for match ${matchId}`);
     

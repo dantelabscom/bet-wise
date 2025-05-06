@@ -1,53 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { getOrderBook } from '@/lib/services/order-matching';
+import { tradingEngineClient } from '@/lib/clients/trading-engine-client';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
+// Feature flag to control whether to use the Rust trading engine
+const USE_RUST_ENGINE = process.env.USE_RUST_ENGINE === 'true';
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    // Await params before accessing its properties
-    const awaitedParams = await params;
-    const { id } = awaitedParams;
-    
-    if (!id || isNaN(Number(id))) {
-      return NextResponse.json(
-        { error: 'Invalid market ID' },
-        { status: 400 }
-      );
-    }
-    
-    const marketId = Number(id);
+    const marketId = parseInt(params.id);
     
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
-    const marketOptionId = searchParams.get('optionId');
+    const optionId = searchParams.get('optionId');
     
-    if (!marketOptionId || isNaN(Number(marketOptionId))) {
+    if (!optionId) {
       return NextResponse.json(
-        { error: 'Invalid or missing market option ID' },
+        { error: 'Option ID is required' },
         { status: 400 }
       );
     }
     
-    // Get order book
-    const orderBook = await getOrderBook(marketId, Number(marketOptionId));
+    // Use Rust trading engine if feature flag is enabled
+    if (USE_RUST_ENGINE) {
+      try {
+        const result = await tradingEngineClient.getOrderBook(
+          marketId, 
+          parseInt(optionId)
+        );
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch order book from trading engine');
+        }
+        
+        return NextResponse.json({
+          orderBook: result.data,
+          engine: 'rust'
+        });
+      } catch (error: any) {
+        console.error('Error using Rust trading engine for orderbook:', error);
+        // Fall back to TypeScript implementation
+        console.log('Falling back to TypeScript implementation for orderbook');
+      }
+    }
     
-    return NextResponse.json(orderBook);
+    // Default to TypeScript implementation
+    const orderBook = await getOrderBook(marketId, parseInt(optionId));
+    
+    return NextResponse.json({
+      orderBook,
+      engine: 'typescript'
+    });
   } catch (error: any) {
     console.error('Error fetching order book:', error);
     return NextResponse.json(

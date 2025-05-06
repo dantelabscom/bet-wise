@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, decimal, pgEnum, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, integer, boolean, decimal, pgEnum, jsonb, uuid, numeric } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Enums
@@ -128,15 +128,15 @@ export const orders = pgTable('orders', {
 
 // Positions table (aggregated user positions)
 export const positions = pgTable('positions', {
-  id: serial('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id),
-  marketId: integer('market_id').notNull().references(() => markets.id),
-  marketOptionId: integer('market_option_id').notNull().references(() => marketOptions.id),
-  quantity: decimal('quantity', { precision: 12, scale: 2 }).notNull(),
-  averagePrice: decimal('average_price', { precision: 12, scale: 2 }).notNull(),
-  realizedPnl: decimal('realized_pnl', { precision: 12, scale: 2 }).default('0').notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  marketId: integer('market_id').notNull(),
+  marketOptionId: integer('market_option_id').notNull(),
+  quantity: numeric('quantity').notNull(),
+  averageEntryPrice: numeric('average_entry_price').notNull(),
+  realizedPnl: numeric('realized_pnl').notNull().default('0'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow()
 });
 
 // Transactions table (for wallet history)

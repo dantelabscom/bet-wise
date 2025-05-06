@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
       marketId: positions.marketId,
       marketOptionId: positions.marketOptionId,
       quantity: positions.quantity,
-      averagePrice: positions.averagePrice,
       realizedPnl: positions.realizedPnl,
       createdAt: positions.createdAt,
       updatedAt: positions.updatedAt,

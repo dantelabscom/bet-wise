@@ -228,7 +228,7 @@ export default function AdvancedTradeClient({ marketId, initialOptionId, initial
       toast.success('Order cancelled successfully');
       
       // Update orders list
-      setOrders(orders.filter(order => order.id !== orderId));
+      setOrders(orders.filter(order => order.id !== String(orderId)));
     } catch (error) {
       console.error('Error cancelling order:', error);
       toast.error('Failed to cancel order');
@@ -482,7 +482,7 @@ export default function AdvancedTradeClient({ marketId, initialOptionId, initial
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-sm font-medium">
                             <button
-                              onClick={() => handleCancelOrder(order.id)}
+                              onClick={() => handleCancelOrder(parseInt(order.id))}
                               className="text-red-600 hover:text-red-900"
                             >
                               Cancel

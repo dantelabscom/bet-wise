@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
           gte(positions.updatedAt, startDate),
           lte(positions.updatedAt, endDate)
         )
-      ) as Position[];
+      ) as unknown as Position[];
     
     // Get filled orders within the time range
     const filledOrders = await db.select()

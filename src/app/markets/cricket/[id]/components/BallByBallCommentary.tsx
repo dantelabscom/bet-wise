@@ -24,13 +24,13 @@ interface BallByBallCommentaryProps {
 }
 
 export default function BallByBallCommentary({ matchId }: BallByBallCommentaryProps) {
-  const socket = useSocket();
+  const { socket, isConnected } = useSocket();
   const [ballEvents, setBallEvents] = useState<BallEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   
   // Fetch initial ball events and set up listeners
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !isConnected) return;
     
     // Join the match room
     socket.emit('join:match', matchId);
@@ -60,7 +60,7 @@ export default function BallByBallCommentary({ matchId }: BallByBallCommentaryPr
     return () => {
       socket.off('ball:update');
     };
-  }, [socket, matchId]);
+  }, [socket, isConnected, matchId]);
   
   // Helper to format timestamp
   const formatTime = (timestamp: number): string => {
