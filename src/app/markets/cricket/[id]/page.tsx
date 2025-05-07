@@ -8,7 +8,7 @@ import BallByBallCommentary from './components/BallByBallCommentary';
 import PriceChart from './components/PriceChart';
 import OrderBookDetailed from './components/OrderBookDetailed';
 import MatchStats from './components/MatchStats';
-import NewsUpdates from './components/NewsUpdates';
+import UpcomingFixtures from './components/UpcomingFixtures';
 
 interface MatchInfo {
   matchId: string;
@@ -201,12 +201,10 @@ export default function CricketMarketPage() {
         {/* Left column - Main content */}
         <div className="lg:col-span-8 space-y-6">
           {/* Price chart component */}
-          {selectedMarket && (
-            <PriceChart 
-              marketId={selectedMarket.id} 
-              marketName={selectedMarket.name}
-            />
-          )}
+          <PriceChart 
+            marketId={selectedMarket?.id || ''} 
+            marketName={selectedMarket?.name || 'Market'} 
+          />
           
           {/* Score card */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
@@ -263,7 +261,7 @@ export default function CricketMarketPage() {
           )}
           
           {/* News & Updates component */}
-          <NewsUpdates matchId={matchId} />
+          <UpcomingFixtures matchId={matchId} />
         </div>
         
         {/* Right column - Market and trading */}
@@ -296,41 +294,43 @@ export default function CricketMarketPage() {
           {selectedMarket && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
               {/* Tab navigation */}
-              <div className="flex border-b dark:border-gray-700">
+              <div className="flex border-b border-gray-200 dark:border-gray-700">
                 <button
-                  onClick={() => setActiveTab('order')}
-                  className={`flex-1 py-3 text-sm font-medium ${
-                    activeTab === 'order'
-                      ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-500 dark:text-gray-400'
+                  className={`flex-1 py-3 px-4 text-sm font-medium ${
+                    activeTab === 'order' 
+                      ? 'bg-white dark:bg-gray-800 border-b-2 border-blue-500 text-blue-600' 
+                      : 'bg-gray-50 dark:bg-gray-700 text-gray-500 hover:text-gray-700'
                   }`}
+                  onClick={() => setActiveTab('order')}
                 >
-                  Order Entry
+                  Place Order
                 </button>
                 <button
-                  onClick={() => setActiveTab('orderbook')}
-                  className={`flex-1 py-3 text-sm font-medium ${
-                    activeTab === 'orderbook'
-                      ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-500 dark:text-gray-400'
+                  className={`flex-1 py-3 px-4 text-sm font-medium ${
+                    activeTab === 'orderbook' 
+                      ? 'bg-white dark:bg-gray-800 border-b-2 border-blue-500 text-blue-600' 
+                      : 'bg-gray-50 dark:bg-gray-700 text-gray-500 hover:text-gray-700'
                   }`}
+                  onClick={() => setActiveTab('orderbook')}
                 >
                   Order Book
                 </button>
               </div>
               
               {/* Tab content */}
-              {activeTab === 'order' && (
-                <OrderEntry
-                  matchId={matchId}
-                  marketId={selectedMarket.id}
-                  marketName={selectedMarket.name}
-                />
-              )}
-              
-              {activeTab === 'orderbook' && (
-                <OrderBookDetailed marketId={selectedMarket.id} />
-              )}
+              <div className="p-0">
+                {activeTab === 'order' && selectedMarket && (
+                  <OrderEntry 
+                    matchId={matchId} 
+                    marketId={selectedMarket.id} 
+                    marketName={selectedMarket.name} 
+                  />
+                )}
+                
+                {activeTab === 'orderbook' && selectedMarket && (
+                  <OrderBookDetailed marketId={selectedMarket.id} />
+                )}
+              </div>
             </div>
           )}
         </div>

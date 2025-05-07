@@ -12,14 +12,6 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   try {
-    // Check if user is authenticated
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' }, 
-        { status: 401 }
-      );
-    }
 
     // Get match ID from params - properly awaited
     const params = await Promise.resolve(context.params);

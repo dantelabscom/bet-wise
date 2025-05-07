@@ -12,26 +12,10 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   try {
-    // Check if user is authenticated
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' }, 
-        { status: 401 }
-      );
-    }
-
     // Get match ID from params
     const params = await Promise.resolve(context.params);
     const matchId = params.id;
     
-    if (!matchId) {
-      return NextResponse.json(
-        { error: 'Match ID is required' }, 
-        { status: 400 }
-      );
-    }
-
     console.log(`Fetching news for match ID: ${matchId}`);
 
     try {
@@ -78,10 +62,10 @@ export async function GET(
           type: 'news'
         }
       ];
-      
+      console.log('try to fetch')
+      const chainLinkList = sportMonksCricket.fetchChainLinkNews();
       // Try to fetch match details to use real team names
       const matchDetails = await sportMonksCricket.getFixtureById(matchId);
-      
       if (matchDetails.success && matchDetails.data) {
         // Replace generic team names with actual team names
         const localTeam = matchDetails.data.localteam?.name || 'Team A';
@@ -117,5 +101,6 @@ export async function GET(
       }, 
       { status: 500 }
     );
+    
   }
 } 

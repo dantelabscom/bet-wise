@@ -7,6 +7,24 @@ import React, { useState, useEffect } from 'react';
 import { useSocket } from '@/lib/hooks/useSocket';
 import { useSession } from 'next-auth/react';
 
+interface OrderBookLevel {
+  price: number | string;
+  quantity: number;
+  orders?: number;
+}
+
+interface OrderBook {
+  yes?: OrderBookLevel[];
+  no?: OrderBookLevel[];
+  bids?: OrderBookLevel[];
+  asks?: OrderBookLevel[];
+  lastPrice: number | string;
+  lastTradePrice?: number | string;
+  lastTradeQuantity?: number;
+  lastUpdated?: number;
+  marketId?: string;
+}
+
 interface OrderEntryProps {
   matchId: string;
   marketId: string;
@@ -27,9 +45,11 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
   const [success, setSuccess] = useState<boolean>(false);
   
   // Market order book data (from WebSocket)
-  const [orderBook, setOrderBook] = useState<any>({
+  const [orderBook, setOrderBook] = useState<OrderBook>({
     yes: [],
     no: [],
+    bids: [],
+    asks: [],
     lastPrice: 0.5
   });
   
@@ -37,24 +57,65 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
   useEffect(() => {
     if (!socket || !isConnected || !marketId) return;
     
+    console.log(`OrderEntry connecting to market ${marketId} via WebSocket`);
+    
     // Join this market's room
     socket.emit('join:market', marketId);
     
     // Listen for order book updates
-    socket.on('orderbook:update', (data: any) => {
+    socket.on('orderbook:update', (data: OrderBook) => {
+      console.log(`OrderEntry received orderbook update for market ${data.marketId}:`, data);
+      
       if (data.marketId === marketId) {
-        setOrderBook(data);
+        // Transform data if needed - convert bids/asks to yes/no if yes/no is missing
+        const transformedData = { ...data };
+        
+        if (data.bids && data.asks && (!data.yes || !data.no)) {
+          console.log('Converting bids/asks to yes/no format');
+          transformedData.yes = data.bids.map((bid: OrderBookLevel) => ({
+            price: typeof bid.price === 'string' ? parseFloat(bid.price) : bid.price,
+            quantity: bid.quantity,
+            orders: bid.orders
+          }));
+          
+          transformedData.no = data.asks.map((ask: OrderBookLevel) => ({
+            price: typeof ask.price === 'string' ? parseFloat(ask.price) : ask.price,
+            quantity: ask.quantity,
+            orders: ask.orders
+          }));
+        }
+        
+        setOrderBook(transformedData);
+        
+        // Update price if needed based on best bid/ask
+        if (side === 'yes' && transformedData.yes && transformedData.yes.length > 0) {
+          setPrice(typeof transformedData.yes[0].price === 'string' 
+            ? parseFloat(transformedData.yes[0].price) 
+            : transformedData.yes[0].price);
+        } else if (side === 'no' && transformedData.no && transformedData.no.length > 0) {
+          setPrice(typeof transformedData.no[0].price === 'string' 
+            ? parseFloat(transformedData.no[0].price) 
+            : transformedData.no[0].price);
+        }
       }
     });
     
     // Listen for price updates
     socket.on('price:update', (data: any) => {
-      if (data.marketId === marketId) {
-        // Update best price
+      console.log(`OrderEntry received price update for market ${data.marketId}:`, data);
+      
+      if (data.marketId === marketId && data.lastPrice) {
+        // Update order book last price
+        setOrderBook((prev: OrderBook) => ({
+          ...prev,
+          lastPrice: typeof data.lastPrice === 'string' ? parseFloat(data.lastPrice) : data.lastPrice
+        }));
+        
+        // Update form price
         if (side === 'yes') {
-          setPrice(data.bestYesPrice || 0.5);
+          setPrice(data.bestYesPrice || data.lastPrice || 0.5);
         } else {
-          setPrice(data.bestNoPrice || 0.5);
+          setPrice(data.bestNoPrice || (1 - (data.lastPrice || 0.5)));
         }
       }
     });
@@ -67,9 +128,9 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
     
     // Clean up
     return () => {
-      socket.off('orderbook:update');
-      socket.off('price:update');
-      socket.off('error');
+      socket.off('orderbook:update', () => {});
+      socket.off('price:update', () => {});
+      socket.off('error', () => {});
     };
   }, [socket, isConnected, marketId, side]);
   
@@ -136,6 +197,10 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
     }
   };
   
+  // Extract yes/no data safely, handling both formats
+  const yesData = orderBook.yes || [];
+  const noData = orderBook.no || [];
+  
   return (
     <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg p-6">
       <h3 className="text-lg font-semibold mb-4">{marketName}</h3>
@@ -145,13 +210,14 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
         <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
           <h4 className="text-sm font-medium text-green-600 dark:text-green-400 mb-2">YES</h4>
           <div className="space-y-1">
-            {orderBook.yes.map((level: any, idx: number) => (
-              <div key={`yes-${idx}`} className="text-sm grid grid-cols-2">
-                <span>{level.price.toFixed(2)}</span>
-                <span className="text-right">{level.quantity}</span>
-              </div>
-            ))}
-            {orderBook.yes.length === 0 && (
+            {yesData.length > 0 ? (
+              yesData.map((level: any, idx: number) => (
+                <div key={`yes-${idx}`} className="text-sm grid grid-cols-2">
+                  <span>{typeof level.price === 'number' ? level.price.toFixed(2) : level.price}</span>
+                  <span className="text-right">{level.quantity}</span>
+                </div>
+              ))
+            ) : (
               <div className="text-sm text-gray-500">No orders</div>
             )}
           </div>
@@ -160,13 +226,14 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
         <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
           <h4 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">NO</h4>
           <div className="space-y-1">
-            {orderBook.no.map((level: any, idx: number) => (
-              <div key={`no-${idx}`} className="text-sm grid grid-cols-2">
-                <span>{level.price.toFixed(2)}</span>
-                <span className="text-right">{level.quantity}</span>
-              </div>
-            ))}
-            {orderBook.no.length === 0 && (
+            {noData.length > 0 ? (
+              noData.map((level: any, idx: number) => (
+                <div key={`no-${idx}`} className="text-sm grid grid-cols-2">
+                  <span>{typeof level.price === 'number' ? level.price.toFixed(2) : level.price}</span>
+                  <span className="text-right">{level.quantity}</span>
+                </div>
+              ))
+            ) : (
               <div className="text-sm text-gray-500">No orders</div>
             )}
           </div>
@@ -176,7 +243,11 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
       {/* Last price display */}
       <div className="mb-4 text-center">
         <span className="text-sm text-gray-500">Last Price:</span>
-        <span className="ml-2 font-semibold">{orderBook.lastPrice.toFixed(2)}</span>
+        <span className="ml-2 font-semibold">
+          {typeof orderBook.lastPrice === 'number' 
+            ? orderBook.lastPrice.toFixed(2) 
+            : orderBook.lastPrice || '0.50'}
+        </span>
       </div>
       
       {/* Order entry form */}
@@ -257,39 +328,37 @@ export default function OrderEntry({ matchId, marketId, marketName }: OrderEntry
           </div>
         </div>
         
-        {/* Wallet display */}
-        <div className="mb-4 text-sm">
-          <span className="text-gray-500">Wallet Balance:</span>
-          <span className="ml-2 font-medium">${wallet.toFixed(2)}</span>
-        </div>
-        
         {/* Error display */}
         {error && (
-          <div className="mb-4 p-2 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-md text-sm">
+          <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-md text-sm">
             {error}
           </div>
         )}
         
         {/* Success message */}
         {success && (
-          <div className="mb-4 p-2 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-md text-sm">
+          <div className="mb-4 p-2 bg-green-100 text-green-700 rounded-md text-sm">
             Order placed successfully!
           </div>
         )}
         
+        {/* Wallet display */}
+        <div className="mb-4 text-sm">
+          <span className="text-gray-500">Wallet Balance:</span>
+          <span className="ml-2 font-medium">${wallet.toFixed(2)}</span>
+        </div>
+        
         {/* Submit button */}
         <button
           type="submit"
-          disabled={submitting || !session?.user}
-          className={`w-full py-2 px-4 rounded-md ${
-            submitting 
+          disabled={submitting || !isConnected}
+          className={`w-full py-2 px-4 rounded-md 
+            ${submitting || !isConnected 
               ? 'bg-gray-400 cursor-not-allowed' 
-              : side === 'yes'
-                ? 'bg-green-600 hover:bg-green-700 text-white'
-                : 'bg-red-600 hover:bg-red-700 text-white'
-          }`}
+              : 'bg-blue-600 hover:bg-blue-700'} 
+            text-white font-medium`}
         >
-          {submitting ? 'Placing Order...' : `Place ${side.toUpperCase()} Order`}
+          {submitting ? 'Placing Order...' : 'Place Order'}
         </button>
       </form>
     </div>

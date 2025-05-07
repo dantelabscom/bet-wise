@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
+import NewsUpdates from './[id]/components/NewsUpdates';
 
 interface CricketMatch {
   id: string;
@@ -84,6 +85,9 @@ export default function CricketMarketsPage() {
         <h1 className="text-2xl font-bold mb-6">Cricket Markets</h1>
         <div className="bg-white rounded-lg shadow-md p-6 min-h-[300px] flex items-center justify-center">
           <div className="text-gray-500">Loading cricket matches...</div>
+        </div>
+        <div className='pt-5'>
+          <NewsUpdates/>
         </div>
       </div>
     );

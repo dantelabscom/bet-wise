@@ -12,7 +12,7 @@ const TRADING_ENGINE_WS_URL = process.env.NEXT_PUBLIC_TRADING_ENGINE_WS_URL || '
 export class WebSocketService {
   private static instance: WebSocketService;
   public io: SocketIOServer | null = null;
-  private tradingEngineWs: WebSocket | null = null;
+  private tradingEngineWs: any = null; // Using any to avoid WebSocket type issues
   
   // Private constructor for singleton pattern
   private constructor() {}
@@ -27,6 +27,12 @@ export class WebSocketService {
   
   // Initialize Socket.IO server
   public initialize(serverOrIo: HTTPServer | SocketIOServer): void {
+    // Only run on server side
+    if (typeof window !== 'undefined') {
+      console.log('WebSocketService: Skipping initialization in browser environment');
+      return;
+    }
+    
     if (this.io) {
       console.log('WebSocket server already initialized');
       return;
@@ -65,7 +71,7 @@ export class WebSocketService {
         console.log(`Client ${socket.id} joined market room: ${marketId}`);
         
         // If using Rust engine, join the market room in the trading engine
-        if (USE_RUST_ENGINE && this.tradingEngineWs && this.tradingEngineWs.readyState === WebSocket.OPEN) {
+        if (USE_RUST_ENGINE && this.tradingEngineWs && this.tradingEngineWs.readyState === 1) {
           this.tradingEngineWs.send(JSON.stringify({
             type: 'join',
             data: `market:${marketId}`
@@ -99,20 +105,25 @@ export class WebSocketService {
     });
     
     // Connect to Rust trading engine WebSocket if enabled
-    if (USE_RUST_ENGINE && typeof window === 'undefined') {
+    if (USE_RUST_ENGINE) {
       this.connectToTradingEngine();
     }
   }
   
   // Connect to the Rust trading engine WebSocket
   private connectToTradingEngine(): void {
+    // Server-side only
+    if (typeof window !== 'undefined') return;
+    
     try {
-      // Only run on server side
-      if (typeof WebSocket === 'undefined') {
-        const WebSocket = require('ws');
-        this.tradingEngineWs = new WebSocket(TRADING_ENGINE_WS_URL);
+      // We'll use the global.WebSocket in Node.js environment
+      // This will be available through Socket.io's dependencies
+      // No need to require 'ws' separately
+      if (typeof global !== 'undefined' && global.WebSocket) {
+        this.tradingEngineWs = new global.WebSocket(TRADING_ENGINE_WS_URL);
       } else {
-        this.tradingEngineWs = new WebSocket(TRADING_ENGINE_WS_URL);
+        console.error('WebSocket not available in this environment');
+        return;
       }
       
       if (!this.tradingEngineWs) {
@@ -124,7 +135,7 @@ export class WebSocketService {
         console.log('Connected to Rust trading engine WebSocket');
       };
       
-      this.tradingEngineWs.onmessage = (event) => {
+      this.tradingEngineWs.onmessage = (event: any) => {
         try {
           const message = JSON.parse(event.data.toString());
           
@@ -151,7 +162,7 @@ export class WebSocketService {
         }
       };
       
-      this.tradingEngineWs.onerror = (error) => {
+      this.tradingEngineWs.onerror = (error: any) => {
         console.error('Trading engine WebSocket error:', error);
       };
       

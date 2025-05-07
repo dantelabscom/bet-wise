@@ -55,7 +55,9 @@ export default function NewsUpdates({ matchId }: NewsUpdatesProps) {
       });
       
       return () => {
-        socket.off('news:update');
+        socket.off('news:update', (data: any) => {
+          // Empty callback to match the event listener
+        });
       };
     }
   }, [matchId, socket, isConnected]);
