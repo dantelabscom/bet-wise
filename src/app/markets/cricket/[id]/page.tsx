@@ -8,7 +8,6 @@ import BallByBallCommentary from './components/BallByBallCommentary';
 import PriceChart from './components/PriceChart';
 import OrderBookDetailed from './components/OrderBookDetailed';
 import MatchStats from './components/MatchStats';
-import UpcomingFixtures from './components/UpcomingFixtures';
 
 interface MatchInfo {
   matchId: string;
@@ -80,13 +79,28 @@ export default function CricketMarketPage() {
           throw new Error(marketsData.error || 'Failed to fetch markets data');
         }
         
-        setMarkets(marketsData.data);
+        console.log('Markets data received:', marketsData.data);
         
-        // Select the first market by default
         if (marketsData.data.length > 0) {
-          setSelectedMarket(marketsData.data[0]);
+          // Log all market IDs for debugging
+          marketsData.data.forEach((market: MarketInfo) => {
+            console.log(`Market found: ${market.id} (${market.name})`);
+          });
+          
+          // Find the main market (should be the match ID itself)
+          const mainMarket = marketsData.data.find((m: MarketInfo) => m.id === matchId);
+          
+          if (mainMarket) {
+            console.log(`Selected main market: ${mainMarket.id}`);
+            setSelectedMarket(mainMarket);
+          } else {
+            // Fall back to first market if main market not found
+            console.log(`Main market with ID ${matchId} not found, using first available market`);
+            setSelectedMarket(marketsData.data[0]);
+          }
         }
         
+        setMarkets(marketsData.data);
         setLoading(false);
       } catch (err: any) {
         console.error('Error loading market data:', err);
@@ -137,33 +151,7 @@ export default function CricketMarketPage() {
   
   // For mock data, generate random markets if none exist
   if (markets.length === 0) {
-    // Create mock markets
-    const mockMarkets = [
-      {
-        id: 'market-1',
-        name: 'Match Winner',
-        description: `Will ${matchInfo.teams[0]} win the match?`,
-        type: 'match_winner',
-        status: 'open'
-      },
-      {
-        id: 'market-2',
-        name: '6+ Runs in Next Over',
-        description: 'Will there be 6 or more runs in the next over?',
-        type: 'runs_in_over',
-        status: 'open'
-      },
-      {
-        id: 'market-3',
-        name: 'Wicket in Next Over',
-        description: 'Will there be a wicket in the next over?',
-        type: 'wicket_in_over',
-        status: 'open'
-      }
-    ];
-    
-    setMarkets(mockMarkets);
-    setSelectedMarket(mockMarkets[0]);
+    console.warn('No markets found from API, displaying placeholder UI');
   }
   
   // Current score display helper
@@ -259,9 +247,6 @@ export default function CricketMarketPage() {
               </div>
             </div>
           )}
-          
-          {/* News & Updates component */}
-          <UpcomingFixtures matchId={matchId} />
         </div>
         
         {/* Right column - Market and trading */}

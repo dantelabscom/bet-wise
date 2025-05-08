@@ -58,11 +58,13 @@ export default function BallByBallCommentary({ matchId }: BallByBallCommentaryPr
     
     // Clean up
     return () => {
-      socket.off('ball:update');
+      socket.off('ball:update', (ballEvent: BallEvent) => {
+        if (ballEvent.matchId === matchId) {
+          setBallEvents(prev => [ballEvent, ...prev].slice(0, 20));
+        }
+      });
     };
   }, [socket, isConnected, matchId]);
-  
-  // Helper to format timestamp
   const formatTime = (timestamp: number): string => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };

@@ -4,6 +4,7 @@ import { Position, OrderSide } from '../services/orderbook/types';
 export type { Position };
 
 export interface PositionCalculation {
+  [x: string]: string;
   quantity: string;
   averageEntryPrice: string;
   realizedPnl: string;

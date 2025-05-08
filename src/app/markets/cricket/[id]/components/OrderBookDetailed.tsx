@@ -37,28 +37,74 @@ export default function OrderBookDetailed({ marketId }: OrderBookDetailedProps) 
     // Join this market's room
     socket.emit('join:market', marketId);
     
+    // Request initial order book data
+    socket.emit('get:orderbook', { marketId });
+    
     // Listen for order book updates
     const handleOrderBookUpdate = (data: any) => {
-      console.log(`OrderBookDetailed: Received update for market ${data.marketId}:`, data);
+      if (data.marketId !== marketId) return;
       
-      if (data.marketId === marketId) {
-        // Ensure we have bids and asks
-        const updatedData = {
-          ...data,
-          bids: data.bids || [],
-          asks: data.asks || []
+      console.log(`OrderBookDetailed: Received update for market ${marketId}:`, data);
+      
+      // Ensure data has the expected structure
+      if (!data || ((!data.bids || !data.asks) && !data.lastPrice)) {
+        console.warn('Received incomplete orderbook data:', data);
+        return;
+      }
+      
+      // Type check and normalize the data
+      const normalizedData = {
+        marketId: data.marketId,
+        bids: Array.isArray(data.bids) ? data.bids.map((bid: OrderLevel) => ({
+          price: typeof bid.price === 'string' ? parseFloat(bid.price) : bid.price,
+          quantity: typeof bid.quantity === 'string' ? parseFloat(bid.quantity) : bid.quantity,
+          orders: bid.orders || 1
+        })) : [],
+        asks: Array.isArray(data.asks) ? data.asks.map((ask: OrderLevel) => ({
+          price: typeof ask.price === 'string' ? parseFloat(ask.price) : ask.price,
+          quantity: typeof ask.quantity === 'string' ? parseFloat(ask.quantity) : ask.quantity,
+          orders: ask.orders || 1
+        })) : [],
+        lastPrice: data.lastPrice || '0.50',
+        lastTradePrice: data.lastTradePrice,
+        lastTradeQuantity: data.lastTradeQuantity,
+        lastUpdated: data.lastUpdated || Date.now()
+      };
+      
+      // Update order book state with a forced new reference
+      setOrderBook(prev => {
+        if (!prev) return normalizedData;
+        
+        // Create a completely new object to ensure re-render
+        const updatedOrderBook = {
+          ...prev,
+          ...normalizedData,
+          // Sort bids in descending order (highest first)
+          bids: normalizedData.bids.sort((a: OrderLevel, b: OrderLevel) => 
+            Number(b.price) - Number(a.price)
+          ),
+          // Sort asks in ascending order (lowest first)
+          asks: normalizedData.asks.sort((a: OrderLevel, b: OrderLevel) => 
+            Number(a.price) - Number(b.price)
+          ),
+          // Always update the timestamp to ensure state change
+          lastUpdated: Date.now()
         };
         
-        setOrderBook(updatedData);
-        setLoading(false);
-      }
+        return updatedOrderBook;
+      });
+      
+      setLoading(false);
     };
     
     socket.on('orderbook:update', handleOrderBookUpdate);
+    socket.on('trade:executed', handleOrderBookUpdate);
     
     // Clean up
     return () => {
       socket.off('orderbook:update', handleOrderBookUpdate);
+      socket.off('trade:executed', handleOrderBookUpdate);
+      socket.emit('leave:market', marketId);
     };
   }, [socket, isConnected, marketId]);
   

@@ -82,7 +82,18 @@ export class MarketService {
     description: string,
     parameters?: any
   ): Market {
-    const id = uuidv4();
+    // Use the match ID directly as the market ID for the main market
+    // For secondary markets, append the type
+    let id: string;
+    
+    if (type === MarketType.MATCH_WINNER) {
+      // Main market - use the match ID directly
+      id = matchId;
+    } else {
+      // Secondary market - append the type for uniqueness
+      id = `${matchId}-${type}`;
+    }
+    
     const now = Date.now();
     
     const market: Market = {
@@ -99,8 +110,6 @@ export class MarketService {
     
     // Store the market
     this.markets.set(id, market);
-    
-    // No need to create order book here - it will be created when first order is placed
     
     console.log(`Created market: ${name} (${id}) for match ${matchId}`);
     
@@ -186,7 +195,8 @@ export class MarketService {
   public createStandardMarketsForMatch(matchId: string): Market[] {
     const markets: Market[] = [];
     
-    // Match winner market
+    // Main market - Match winner
+    // This will use the match ID directly
     markets.push(this.createMarket(
       matchId,
       MarketType.MATCH_WINNER,
@@ -195,7 +205,7 @@ export class MarketService {
       {}
     ));
     
-    // Current over markets
+    // Secondary markets - these will append the type to the match ID
     markets.push(this.createMarket(
       matchId,
       MarketType.RUNS_IN_OVER,
@@ -221,6 +231,7 @@ export class MarketService {
     ));
     
     console.log(`Created ${markets.length} standard markets for match ${matchId}`);
+    console.log(`Main market ID: ${matchId}`);
     
     return markets;
   }

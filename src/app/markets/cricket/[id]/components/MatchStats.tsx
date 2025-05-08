@@ -83,11 +83,10 @@ export default function MatchStats({ matchId }: MatchStatsProps) {
       });
       
       return () => {
-        socket.off('match:update');
+        socket.off('match:update', () => {});
       };
     }
   }, [matchId, socket, isConnected]);
-  
   // Set mock data if API fails
   const setMockData = () => {
     setBattingTeam({

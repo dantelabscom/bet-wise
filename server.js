@@ -2,7 +2,6 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { parse } = require('url');
 const next = require('next');
-const WebSocket = require('ws');
 const path = require('path');
 const dotenv = require('dotenv');
 const axios = require('axios');
@@ -19,9 +18,6 @@ require('ts-node').register({
 
 // Load environment variables from .env.local
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
-
-// Make WebSocket available globally for the trading engine connection
-global.WebSocket = WebSocket;
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
@@ -41,6 +37,23 @@ app.prepare().then(() => {
       credentials: true
     }
   });
+
+  // Make io available globally so it can be accessed by API routes
+  global.io = io;
+
+  // Initialize the WebSocket service FIRST before any other service
+  let webSocketService;
+  try {
+    // Import the WebSocket service dynamically
+    const wsModule = require('./src/lib/services/websocket/socket-service.js');
+    webSocketService = wsModule.webSocketService;
+    
+    // Set the Socket.IO instance in the WebSocket service
+    webSocketService.setIoInstance(io);
+    console.log('WebSocket service initialized with Socket.IO instance');
+  } catch (error) {
+    console.error('Failed to initialize WebSocket service:', error);
+  }
 
   // Set up Socket.IO connection events
   io.on('connection', (socket) => {
@@ -67,15 +80,15 @@ app.prepare().then(() => {
         
         if (marketData) {
           console.log(`Sending initial orderbook data for market ${marketId}:`, {
-            bids: marketData.bids || [],
-            asks: marketData.asks || []
+            bids: marketData.orderBook?.bids || [],
+            asks: marketData.orderBook?.asks || []
           });
           
           // Send the current order book to the client
           socket.emit('orderbook:update', {
             marketId,
-            bids: marketData.bids || [],
-            asks: marketData.asks || [],
+            bids: marketData.orderBook?.bids || [],
+            asks: marketData.orderBook?.asks || [],
             lastPrice: marketData.currentPrice || 0.5,
             lastTradePrice: marketData.lastTradePrice || 0.5,
             lastTradeQuantity: marketData.lastTradeQuantity || 0,
@@ -127,8 +140,8 @@ app.prepare().then(() => {
             if (marketData) {
               io.to(`market:${order.marketId}`).emit('orderbook:update', {
                 marketId: order.marketId,
-                bids: marketData.bids || [],
-                asks: marketData.asks || [],
+                bids: marketData.orderBook?.bids || [],
+                asks: marketData.orderBook?.asks || [],
                 lastPrice: marketData.currentPrice || 0.5,
                 lastTradePrice: marketData.lastTradePrice || 0.5,
                 lastTradeQuantity: marketData.lastTradeQuantity || 0,
@@ -168,21 +181,6 @@ app.prepare().then(() => {
     });
   });
 
-  // Make io available globally so it can be accessed by API routes
-  global.io = io;
-
-  // Initialize the WebSocket service
-  try {
-    // Import the WebSocket service dynamically
-    const { webSocketService } = require('./src/lib/services/websocket/socket-service.js');
-    
-    // Set the Socket.IO instance in the WebSocket service
-    webSocketService.setIoInstance(io);
-    console.log('WebSocket service initialized with Socket.IO instance');
-  } catch (error) {
-    console.error('Failed to initialize WebSocket service:', error);
-  }
-
   // Start server
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, async (err) => {
@@ -196,6 +194,17 @@ app.prepare().then(() => {
       
       // Import the bot service and sentiment service dynamically
       const { botService, sentimentService } = require('./src/lib/services/liquidity/index.js');
+      
+      // Make sure the bot service has access to the WebSocket service
+      if (webSocketService) {
+        // Explicitly pass the WebSocket service to the bot service if needed
+        if (typeof botService.setWebSocketService === 'function') {
+          botService.setWebSocketService(webSocketService);
+          console.log('WebSocket service explicitly connected to bot service');
+        }
+      } else {
+        console.error('WebSocket service not available for bot service');
+      }
       
       // Start the bot service
       botService.start();

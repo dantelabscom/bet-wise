@@ -67,6 +67,7 @@ export class BotService {
   private markets: Map<string, Market> = new Map();
   private orderIntervals: Map<string, NodeJS.Timeout> = new Map();
   private isRunning: boolean = false;
+  private wsService: any = null; // Reference to the WebSocket service
 
   // Private constructor for singleton pattern
   private constructor() {
@@ -79,6 +80,19 @@ export class BotService {
       BotService.instance = new BotService();
     }
     return BotService.instance;
+  }
+
+  // Set the WebSocket service explicitly to avoid circular dependency issues
+  public setWebSocketService(wsService: any): void {
+    this.wsService = wsService;
+    console.log('WebSocket service set in BotService');
+    
+    // Test the connection
+    if (this.wsService && typeof this.wsService.sendOrderBookUpdate === 'function') {
+      console.log('WebSocket service connection verified with sendOrderBookUpdate method');
+    } else {
+      console.error('WebSocket service connection failed - sendOrderBookUpdate method not available');
+    }
   }
 
   // Initialize bots with different strategies
@@ -437,16 +451,14 @@ export class BotService {
     this.sendOrderBookUpdate(userOrder.marketId);
   }
 
-  // Send order book update via WebSocket
-  private sendOrderBookUpdate(marketId: string): void {
+  // Get market data
+  public getMarketData(marketId: string): any {
     const market = this.markets.get(marketId);
-    if (!market) return;
+    if (!market) return null;
     
-    console.log(`Preparing order book update for market ${marketId}`);
-    
-    // Get all buy orders (bids)
+    // Format bids and asks for the orderbook
     const bids = market.orders
-      .filter(order => order.type === OrderType.BUY && order.side === OrderSide.YES)
+      .filter(order => order.type === OrderType.BUY)
       .sort((a, b) => b.price - a.price) // Sort by price descending (highest bid first)
       .reduce((acc: any[], order) => {
         // Group by price level
@@ -467,7 +479,7 @@ export class BotService {
     
     // Get all sell orders (asks)
     const asks = market.orders
-      .filter(order => order.type === OrderType.SELL && order.side === OrderSide.YES)
+      .filter(order => order.type === OrderType.SELL)
       .sort((a, b) => a.price - b.price) // Sort by price ascending (lowest ask first)
       .reduce((acc: any[], order) => {
         // Group by price level
@@ -486,74 +498,171 @@ export class BotService {
       }, [])
       .slice(0, 10); // Only take top 10 levels
     
-    // Make sure we always have at least one level in each side to avoid UI issues
-    if (bids.length === 0) {
-      bids.push({
-        price: Math.max(0.01, (market.currentPrice - 0.05)).toFixed(2),
-        quantity: 10,
-        orders: 1
-      });
-    }
+    return {
+      id: market.id,
+      name: market.name,
+      description: market.description,
+      currentPrice: market.currentPrice,
+      lastTradePrice: market.lastTradePrice,
+      orderBook: {
+        bids,
+        asks
+      }
+    };
+  }
+
+  // Send order book update via WebSocket
+  private sendOrderBookUpdate(marketId: string): void {
+    const market = this.markets.get(marketId);
+    if (!market) return;
     
-    if (asks.length === 0) {
-      asks.push({
-        price: Math.min(0.99, (market.currentPrice + 0.05)).toFixed(2),
-        quantity: 10,
-        orders: 1
-      });
-    }
+    console.log(`Preparing order book update for market ${marketId}`);
     
-    // Prepare the order book data
+    // Get market data with formatted orders
+    const marketData = this.getMarketData(marketId);
+    if (!marketData) return;
+
+    // Format the order book data for UI
     const orderBookData = {
       marketId,
-      bids,
-      asks,
+      yesOrders: marketData.orderBook.yesOrders,
+      noOrders: marketData.orderBook.noOrders,
       lastPrice: market.currentPrice.toFixed(2),
       lastTradePrice: market.lastTradePrice ? market.lastTradePrice.toFixed(2) : null,
-      lastTradeQuantity: null,
+      yesPercentage: marketData.yesPercentage,
+      totalYesVolume: marketData.orderBook.totalYesVolume,
+      totalNoVolume: marketData.orderBook.totalNoVolume,
       lastUpdated: Date.now()
     };
     
-    console.log(`Sending order book update for market ${marketId}: ${bids.length} bids, ${asks.length} asks`);
+    console.log(`Sending order book update for market ${marketId}`);
     
     try {
-      // Check if we're in a Node.js environment with global io
+      // First check if we have a direct reference to the WebSocket service
+      if (this.wsService) {
+        if (typeof this.wsService.sendOrderBookUpdate === 'function') {
+          this.wsService.sendOrderBookUpdate(marketId, orderBookData);
+          this.wsService.sendPriceUpdate(marketId, {
+            marketId,
+            lastPrice: market.currentPrice,
+            yesPercentage: marketData.yesPercentage,
+            timestamp: Date.now()
+          });
+          return;
+        } else {
+          console.error('WebSocket service exists but sendOrderBookUpdate method is not available');
+        }
+      }
+      
+      // Check if global.io is available (direct Socket.IO access)
       if (typeof global !== 'undefined' && global.io) {
-        // Use the global Socket.IO instance
         const io = global.io as any;
         io.to(`market:${marketId}`).emit('orderbook:update', orderBookData);
-      } else {
-        console.warn('WebSocket server not initialized');
-      }
-    } catch (error) {
-      console.error('Error sending order book update:', error);
-    }
-    
-    // Also send a simplified price update for charting
-    try {
-      if (typeof global !== 'undefined' && global.io) {
-        const io = global.io as any;
         io.to(`market:${marketId}`).emit('price:update', {
           marketId,
-          lastPrice: market.currentPrice.toFixed(2),
-          lastUpdated: Date.now()
+          lastPrice: market.currentPrice,
+          yesPercentage: marketData.yesPercentage,
+          timestamp: Date.now()
+        });
+        console.log(`Sent order book update via global.io for market ${marketId}`);
+        return;
+      }
+      
+      // Check if webSocketService is available globally
+      if (typeof webSocketService !== 'undefined' && webSocketService) {
+        // Send via WebSocket service
+        webSocketService.sendOrderBookUpdate(marketId, orderBookData);
+        
+        // Also send a price update for charts
+        webSocketService.sendPriceUpdate(marketId, {
+          marketId,
+          lastPrice: market.currentPrice,
+          yesPercentage: marketData.yesPercentage,
+          timestamp: Date.now()
+        });
+      } else {
+        // Try to dynamically import the webSocketService
+        import('../websocket/socket-service').then(module => {
+          const wsService = module.webSocketService;
+          if (wsService) {
+            // Save for future use
+            this.wsService = wsService;
+            
+            wsService.sendOrderBookUpdate(marketId, orderBookData);
+            wsService.sendPriceUpdate(marketId, {
+              marketId,
+              lastPrice: market.currentPrice,
+              yesPercentage: marketData.yesPercentage,
+              timestamp: Date.now()
+            });
+          } else {
+            console.warn('WebSocket service not available for sending order book update');
+          }
+        }).catch(err => {
+          console.error('Error importing WebSocket service:', err);
         });
       }
     } catch (error) {
-      console.error('Error sending price update:', error);
+      console.error('Error sending order book update:', error);
     }
   }
 
   // Send trade update via WebSocket
   private sendTradeUpdate(marketId: string, tradeData: any): void {
     try {
-      // Check if we're in a Node.js environment
+      // First check if we have a direct reference to the WebSocket service
+      if (this.wsService) {
+        if (typeof this.wsService.sendPriceUpdate === 'function') {
+          this.wsService.sendPriceUpdate(marketId, {
+            marketId,
+            lastPrice: tradeData.price,
+            timestamp: tradeData.timestamp
+          });
+          return;
+        } else {
+          console.error('WebSocket service exists but sendPriceUpdate method is not available');
+        }
+      }
+      
+      // Check if global.io is available (direct Socket.IO access)
       if (typeof global !== 'undefined' && global.io) {
-        // Use the global Socket.IO instance
         const io = global.io as any;
+        io.to(`market:${marketId}`).emit('price:update', {
+          marketId,
+          lastPrice: tradeData.price,
+          timestamp: tradeData.timestamp
+        });
         io.to(`market:${marketId}`).emit('trade:update', tradeData);
+        console.log(`Sent trade update via global.io for market ${marketId}`);
+        return;
+      }
+      
+      // Check if webSocketService is available globally
+      if (typeof webSocketService !== 'undefined' && webSocketService) {
+        webSocketService.sendPriceUpdate(marketId, {
+          marketId,
+          lastPrice: tradeData.price,
+          timestamp: tradeData.timestamp
+        });
       } else {
-        console.warn('WebSocket server not initialized for trade update');
+        // Try to dynamically import the webSocketService
+        import('../websocket/socket-service').then(module => {
+          const wsService = module.webSocketService;
+          if (wsService) {
+            // Save for future use
+            this.wsService = wsService;
+            
+            wsService.sendPriceUpdate(marketId, {
+              marketId,
+              lastPrice: tradeData.price,
+              timestamp: tradeData.timestamp
+            });
+          } else {
+            console.warn('WebSocket service not available for sending trade update');
+          }
+        }).catch(err => {
+          console.error('Error importing WebSocket service:', err);
+        });
       }
     } catch (error) {
       console.error('Error sending trade update:', error);
@@ -563,35 +672,6 @@ export class BotService {
   // Get a random interval for bot activity
   private getRandomInterval(): number {
     return ORDER_INTERVAL_MIN + Math.random() * (ORDER_INTERVAL_MAX - ORDER_INTERVAL_MIN);
-  }
-
-  // Get market data
-  public getMarketData(marketId: string): any {
-    const market = this.markets.get(marketId);
-    if (!market) return null;
-    
-    return {
-      id: market.id,
-      name: market.name,
-      description: market.description,
-      currentPrice: market.currentPrice,
-      orderBook: {
-        bids: market.orders
-          .filter(order => order.type === OrderType.BUY)
-          .sort((a, b) => b.price - a.price)
-          .map(order => ({
-            price: order.price,
-            quantity: order.quantity
-          })),
-        asks: market.orders
-          .filter(order => order.type === OrderType.SELL)
-          .sort((a, b) => a.price - b.price)
-          .map(order => ({
-            price: order.price,
-            quantity: order.quantity
-          }))
-      }
-    };
   }
 
   // Start all liquidity generation

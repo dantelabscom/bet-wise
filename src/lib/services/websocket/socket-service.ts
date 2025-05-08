@@ -1,9 +1,7 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-
-// Feature flag to control whether to use the Rust trading engine
-const USE_RUST_ENGINE = process.env.USE_RUST_ENGINE === 'true';
-const TRADING_ENGINE_WS_URL = process.env.NEXT_PUBLIC_TRADING_ENGINE_WS_URL || 'ws://localhost:8080/ws';
+// Remove direct import of botService to avoid circular dependency
+// import { botService } from '../liquidity/bot-service';
 
 /**
  * WebSocket service to handle real-time communications
@@ -12,7 +10,6 @@ const TRADING_ENGINE_WS_URL = process.env.NEXT_PUBLIC_TRADING_ENGINE_WS_URL || '
 export class WebSocketService {
   private static instance: WebSocketService;
   public io: SocketIOServer | null = null;
-  private tradingEngineWs: any = null; // Using any to avoid WebSocket type issues
   
   // Private constructor for singleton pattern
   private constructor() {}
@@ -70,26 +67,166 @@ export class WebSocketService {
         socket.join(`market:${marketId}`);
         console.log(`Client ${socket.id} joined market room: ${marketId}`);
         
-        // If using Rust engine, join the market room in the trading engine
-        if (USE_RUST_ENGINE && this.tradingEngineWs && this.tradingEngineWs.readyState === 1) {
-          this.tradingEngineWs.send(JSON.stringify({
-            type: 'join',
-            data: `market:${marketId}`
-          }));
+        // Check if this market exists in bot service
+        try {
+          // Dynamically import botService to avoid circular dependency
+          import('../liquidity/bot-service').then(module => {
+            const botService = module.botService;
+            if (botService) {
+              const marketData = botService.getMarketData(marketId);
+              console.log(`Market ${marketId} found in bot service`);
+              
+              // Send initial order book data
+              if (marketData) {
+                socket.emit('orderbook:update', {
+                  marketId,
+                  bids: marketData.orderBook?.bids || [],
+                  asks: marketData.orderBook?.asks || [],
+                  lastPrice: marketData.currentPrice || 0.5,
+                  lastUpdated: Date.now()
+                });
+              }
+            }
+          }).catch(err => {
+            console.error('Error importing bot service:', err);
+          });
+        } catch (error) {
+          console.log(`Market ${marketId} not found in bot service`);
         }
+        
+        // Handle get:orderbook requests
+        socket.on('get:orderbook', (data: { marketId: string }) => {
+          if (data.marketId !== marketId) return;
+          
+          console.log(`Client ${socket.id} requested orderbook for market: ${data.marketId}`);
+          
+          try {
+            // Dynamically import botService to avoid circular dependency
+            import('../liquidity/bot-service').then(module => {
+              const botService = module.botService;
+              if (botService) {
+                // Get order book data from bot service
+                const marketData = botService.getMarketData(data.marketId);
+                if (marketData) {
+                  socket.emit('orderbook:update', {
+                    marketId: data.marketId,
+                    bids: marketData.orderBook?.bids || [],
+                    asks: marketData.orderBook?.asks || [],
+                    lastPrice: marketData.currentPrice || 0.5,
+                    lastUpdated: Date.now()
+                  });
+                } else {
+                  // Send empty order book if market not found
+                  socket.emit('orderbook:update', {
+                    marketId: data.marketId,
+                    bids: [],
+                    asks: [],
+                    lastPrice: 0.5,
+                    lastUpdated: Date.now()
+                  });
+                }
+              }
+            }).catch(err => {
+              console.error('Error importing bot service:', err);
+              // Send empty order book on error
+              socket.emit('orderbook:update', {
+                marketId: data.marketId,
+                bids: [],
+                asks: [],
+                lastPrice: 0.5,
+                lastUpdated: Date.now()
+              });
+            });
+          } catch (error) {
+            console.error(`Error getting order book for market ${data.marketId}:`, error);
+            // Send empty order book on error
+            socket.emit('orderbook:update', {
+              marketId: data.marketId,
+              bids: [],
+              asks: [],
+              lastPrice: 0.5,
+              lastUpdated: Date.now()
+            });
+          }
+        });
+        
+        // Handle get:price_history requests
+        socket.on('get:price_history', (data: { marketId: string }) => {
+          if (data.marketId !== marketId) return;
+          
+          console.log(`Client ${socket.id} requested price history for market: ${data.marketId}`);
+          
+          try {
+            // Dynamically import botService to avoid circular dependency
+            import('../liquidity/bot-service').then(module => {
+              const botService = module.botService;
+              if (botService) {
+                // Get market data from bot service
+                const marketData = botService.getMarketData(data.marketId);
+                if (marketData && marketData.priceHistory) {
+                  socket.emit('price:history', {
+                    marketId: data.marketId,
+                    history: marketData.priceHistory || []
+                  });
+                } else {
+                  // Send empty price history if not found
+                  socket.emit('price:history', {
+                    marketId: data.marketId,
+                    history: []
+                  });
+                }
+              }
+            }).catch(err => {
+              console.error('Error importing bot service:', err);
+              // Send empty price history on error
+              socket.emit('price:history', {
+                marketId: data.marketId,
+                history: []
+              });
+            });
+          } catch (error) {
+            console.error(`Error getting price history for market ${data.marketId}:`, error);
+            // Send empty price history on error
+            socket.emit('price:history', {
+              marketId: data.marketId,
+              history: []
+            });
+          }
+        });
       });
       
       // Handle placing orders
       socket.on('place:order', async (order: any) => {
         try {
-          // TODO: Process order through order service
-          // This will be implemented in the order service
+          console.log(`Client ${socket.id} placed order for market: ${order.marketId}`, order);
           
-          // Broadcast updated order book
-          this.io?.to(`market:${order.marketId}`).emit('orderbook:update', {
-            marketId: order.marketId,
-            // Updated order book data will be fetched from the order service
-          });
+          // Process order through bot service
+          try {
+            // Dynamically import botService to avoid circular dependency
+            import('../liquidity/bot-service').then(module => {
+              const botService = module.botService;
+              if (botService) {
+                // Add isBot: false to indicate this is a user order
+                const userOrder = { ...order, isBot: false };
+                botService.processUserOrder(userOrder);
+                // Order book update will be sent by the bot service
+              }
+            }).catch(err => {
+              console.error('Error importing bot service:', err);
+              socket.emit('error', {
+                message: 'Failed to process order',
+                order
+              });
+            });
+          } catch (error) {
+            console.error(`Error processing order:`, error);
+            
+            // Send error to client
+            socket.emit('error', {
+              message: 'Failed to process order',
+              order
+            });
+          }
         } catch (error: any) {
           socket.emit('error', {
             message: error.message || 'Failed to place order',
@@ -103,88 +240,12 @@ export class WebSocketService {
         console.log(`Client disconnected: ${socket.id}`);
       });
     });
-    
-    // Connect to Rust trading engine WebSocket if enabled
-    if (USE_RUST_ENGINE) {
-      this.connectToTradingEngine();
-    }
-  }
-  
-  // Connect to the Rust trading engine WebSocket
-  private connectToTradingEngine(): void {
-    // Server-side only
-    if (typeof window !== 'undefined') return;
-    
-    try {
-      // We'll use the global.WebSocket in Node.js environment
-      // This will be available through Socket.io's dependencies
-      // No need to require 'ws' separately
-      if (typeof global !== 'undefined' && global.WebSocket) {
-        this.tradingEngineWs = new global.WebSocket(TRADING_ENGINE_WS_URL);
-      } else {
-        console.error('WebSocket not available in this environment');
-        return;
-      }
-      
-      if (!this.tradingEngineWs) {
-        console.error('Failed to create WebSocket connection to trading engine');
-        return;
-      }
-      
-      this.tradingEngineWs.onopen = () => {
-        console.log('Connected to Rust trading engine WebSocket');
-      };
-      
-      this.tradingEngineWs.onmessage = (event: any) => {
-        try {
-          const message = JSON.parse(event.data.toString());
-          
-          // Forward messages from the trading engine to clients
-          switch (message.type) {
-            case 'orderbook':
-              if (message.data && message.data.market_id && this.io) {
-                this.io.to(`market:${message.data.market_id}`).emit('orderbook:update', message.data);
-              }
-              break;
-            case 'price':
-              if (message.data && message.data.market_id && this.io) {
-                this.io.to(`market:${message.data.market_id}`).emit('price:update', message.data);
-              }
-              break;
-            case 'match':
-              if (message.data && message.data.market_id && this.io) {
-                this.io.to(`market:${message.data.market_id}`).emit('match:update', message.data);
-              }
-              break;
-          }
-        } catch (error) {
-          console.error('Error processing message from trading engine:', error);
-        }
-      };
-      
-      this.tradingEngineWs.onerror = (error: any) => {
-        console.error('Trading engine WebSocket error:', error);
-      };
-      
-      this.tradingEngineWs.onclose = () => {
-        console.log('Disconnected from trading engine WebSocket, attempting to reconnect...');
-        // Attempt to reconnect after a delay
-        setTimeout(() => this.connectToTradingEngine(), 5000);
-      };
-    } catch (error) {
-      console.error('Failed to connect to trading engine WebSocket:', error);
-    }
   }
   
   // Set an existing Socket.IO instance
   public setIoInstance(io: SocketIOServer): void {
     this.io = io;
     console.log('WebSocket service updated with external Socket.IO instance');
-    
-    // Connect to Rust trading engine WebSocket if enabled
-    if (USE_RUST_ENGINE && typeof window === 'undefined' && !this.tradingEngineWs) {
-      this.connectToTradingEngine();
-    }
   }
   
   // Send match update to all clients in a match room

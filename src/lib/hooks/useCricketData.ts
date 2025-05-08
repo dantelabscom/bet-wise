@@ -10,8 +10,6 @@ import {
 
 interface CricketDataState {
   leagues: League[];
-  seasons: Season[];
-  currentSeasons: Season[];
   standings: Standing[];
   fixtures: any[];
   isLoading: boolean;
@@ -21,8 +19,6 @@ interface CricketDataState {
 export function useCricketData() {
   const [state, setState] = useState<CricketDataState>({
     leagues: [],
-    seasons: [],
-    currentSeasons: [],
     standings: [],
     fixtures: [],
     isLoading: false,
@@ -62,55 +58,6 @@ export function useCricketData() {
         error: err.message || 'Failed to fetch leagues'
       }));
       console.error('Error fetching leagues:', err);
-      return [];
-    }
-  }, []);
-
-  // Fetch seasons
-  const fetchSeasons = useCallback(async (includes: string[] = [], currentOnly: boolean = false) => {
-    try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      const response = await axios.get('/api/cricket/seasons', {
-        params: {
-          include: includes.join(','),
-          current: currentOnly
-        }
-      });
-      
-      if (response.data.success) {
-        const seasons = response.data.data.data || [];
-        
-        if (currentOnly) {
-          setState(prev => ({ 
-            ...prev, 
-            currentSeasons: seasons,
-            isLoading: false
-          }));
-        } else {
-          setState(prev => ({ 
-            ...prev, 
-            seasons,
-            isLoading: false
-          }));
-        }
-        
-        return seasons;
-      }
-      
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false,
-        error: 'Failed to fetch seasons'
-      }));
-      return [];
-    } catch (err: any) {
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false,
-        error: err.message || 'Failed to fetch seasons'
-      }));
-      console.error('Error fetching seasons:', err);
       return [];
     }
   }, []);
@@ -306,16 +253,14 @@ export function useCricketData() {
     }
   }, [fetchStandingsBySeason]);
 
-  // Initialize with current seasons and leagues
+  // Initialize with leagues
   useEffect(() => {
     fetchLeagues();
-    fetchSeasons([], true);
-  }, [fetchLeagues, fetchSeasons]);
+  }, [fetchLeagues]);
 
   return {
     ...state,
     fetchLeagues,
-    fetchSeasons,
     fetchStandingsBySeason,
     fetchStandingsByStage,
     fetchFixturesBySeason,
