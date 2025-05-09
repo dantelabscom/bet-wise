@@ -3,120 +3,221 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Order types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OrderType {
-    #[serde(rename = "limit")]
-    Limit,
-    #[serde(rename = "market")]
-    Market,
-}
-
-/// Order sides
+/// Side of an order (buy or sell)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderSide {
-    #[serde(rename = "buy")]
+    /// Buy order (bid)
     Buy,
-    #[serde(rename = "sell")]
+    
+    /// Sell order (ask)
     Sell,
 }
 
-/// Order status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OrderStatus {
-    #[serde(rename = "open")]
-    Open,
-    #[serde(rename = "partially_filled")]
-    PartiallyFilled,
-    #[serde(rename = "filled")]
-    Filled,
-    #[serde(rename = "cancelled")]
-    Cancelled,
-    #[serde(rename = "rejected")]
-    Rejected,
-    #[serde(rename = "expired")]
-    Expired,
-}
-
-/// Add Display implementation for OrderStatus
-impl std::fmt::Display for OrderStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OrderStatus::Open => write!(f, "open"),
-            OrderStatus::PartiallyFilled => write!(f, "partially_filled"),
-            OrderStatus::Filled => write!(f, "filled"),
-            OrderStatus::Cancelled => write!(f, "cancelled"),
+impl From<i32> for OrderSide {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => OrderSide::Buy,
+            1 => OrderSide::Sell,
+            _ => panic!("Invalid OrderSide value: {}", value),
         }
     }
 }
 
-/// Order entity
+impl From<OrderSide> for i32 {
+    fn from(value: OrderSide) -> Self {
+        match value {
+            OrderSide::Buy => 0,
+            OrderSide::Sell => 1,
+        }
+    }
+}
+
+/// Side of market outcome (yes or no)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OutcomeSide {
+    /// Yes outcome
+    Yes,
+    
+    /// No outcome
+    No,
+}
+
+impl From<i32> for OutcomeSide {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => OutcomeSide::Yes,
+            1 => OutcomeSide::No,
+            _ => panic!("Invalid OutcomeSide value: {}", value),
+        }
+    }
+}
+
+impl From<OutcomeSide> for i32 {
+    fn from(value: OutcomeSide) -> Self {
+        match value {
+            OutcomeSide::Yes => 0,
+            OutcomeSide::No => 1,
+        }
+    }
+}
+
+/// Status of an order in the market
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OrderStatus {
+    /// Order is open and can be matched
+    Open,
+    
+    /// Order has been partially filled
+    PartiallyFilled,
+    
+    /// Order has been completely filled
+    Filled,
+    
+    /// Order has been cancelled
+    Cancelled,
+    
+    /// Order was rejected
+    Rejected,
+}
+
+impl From<i32> for OrderStatus {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => OrderStatus::Open,
+            1 => OrderStatus::PartiallyFilled,
+            2 => OrderStatus::Filled,
+            3 => OrderStatus::Cancelled,
+            4 => OrderStatus::Rejected,
+            _ => panic!("Invalid OrderStatus value: {}", value),
+        }
+    }
+}
+
+impl From<OrderStatus> for i32 {
+    fn from(value: OrderStatus) -> Self {
+        match value {
+            OrderStatus::Open => 0,
+            OrderStatus::PartiallyFilled => 1,
+            OrderStatus::Filled => 2,
+            OrderStatus::Cancelled => 3,
+            OrderStatus::Rejected => 4,
+        }
+    }
+}
+
+/// A trading order in the prediction market
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
-    pub id: Uuid,
+    /// Unique identifier for this order
+    pub order_id: Uuid,
+    
+    /// ID of the user who placed this order
     pub user_id: Uuid,
-    pub market_id: i64,
-    pub market_option_id: i64,
-    pub order_type: OrderType,
+    
+    /// ID of the market this order belongs to
+    pub market_id: String,
+    
+    /// Whether this is a buy or sell order
     pub side: OrderSide,
+    
+    /// Whether this order is for the Yes or No outcome
+    pub outcome: OutcomeSide,
+    
+    /// Price of the order (between 0.0 and 1.0)
     pub price: Decimal,
-    pub quantity: Decimal,
-    pub filled_quantity: Decimal,
+    
+    /// Total quantity of shares
+    pub quantity: u32,
+    
+    /// Remaining quantity to be filled
+    pub remaining_quantity: u32,
+    
+    /// Current status of the order
     pub status: OrderStatus,
-    pub expires_at: Option<DateTime<Utc>>,
+    
+    /// When the order was created
     pub created_at: DateTime<Utc>,
+    
+    /// When the order was last updated
     pub updated_at: DateTime<Utc>,
 }
 
-/// Parameters for creating a new order
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrderCreationParams {
-    pub user_id: Uuid,
-    pub market_id: i64,
-    pub market_option_id: i64,
-    pub order_type: OrderType,
-    pub side: OrderSide,
-    pub price: Decimal,
-    pub quantity: Decimal,
-    pub expires_at: Option<DateTime<Utc>>,
-}
+impl Order {
+    /// Creates a new order
+    pub fn new(
+        user_id: Uuid,
+        market_id: String,
+        side: OrderSide,
+        outcome: OutcomeSide,
+        price: Decimal,
+        quantity: u32,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            order_id: Uuid::new_v4(),
+            user_id,
+            market_id,
+            side,
+            outcome,
+            price,
+            quantity,
+            remaining_quantity: quantity,
+            status: OrderStatus::Open,
+            created_at: now,
+            updated_at: now,
+        }
+    }
 
-/// Order book entry (aggregated orders at a price level)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrderBookEntry {
-    pub price: Decimal,
-    pub quantity: Decimal,
-    pub order_count: i32,
-}
+    /// Checks if this order can be matched with another order
+    pub fn can_match_with(&self, other: &Order) -> bool {
+        // Orders must be for the same market
+        if self.market_id != other.market_id {
+            return false;
+        }
 
-/// Order match record
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrderMatch {
-    pub taker_order_id: Uuid,
-    pub maker_order_id: Uuid,
-    pub price: Decimal,
-    pub quantity: Decimal,
-    pub timestamp: DateTime<Utc>,
-}
+        // Orders must be for the same outcome
+        if self.outcome != other.outcome {
+            return false;
+        }
 
-/// Complete order book for a market
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrderBook {
-    pub market_id: i64,
-    pub market_option_id: i64,
-    pub buy_orders: Vec<OrderBookEntry>,
-    pub sell_orders: Vec<OrderBookEntry>,
-    pub last_price: Option<Decimal>,
-    pub last_updated: DateTime<Utc>,
-}
+        // Orders must be on opposite sides
+        if self.side == other.side {
+            return false;
+        }
 
-/// Trade result after matching an order
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeResult {
-    pub order_id: Uuid,
-    pub matches: Vec<OrderMatch>,
-    pub filled_quantity: Decimal,
-    pub average_price: Decimal,
-    pub status: OrderStatus,
-    pub remaining_quantity: Decimal,
+        // A user cannot match with themselves
+        if self.user_id == other.user_id {
+            return false;
+        }
+
+        // Check if prices are compatible
+        match (self.side, other.side) {
+            (OrderSide::Buy, OrderSide::Sell) => self.price >= other.price,
+            (OrderSide::Sell, OrderSide::Buy) => self.price <= other.price,
+            _ => false,
+        }
+    }
+
+    /// Updates the order after a partial fill
+    pub fn apply_fill(&mut self, fill_quantity: u32) {
+        if fill_quantity >= self.remaining_quantity {
+            self.remaining_quantity = 0;
+            self.status = OrderStatus::Filled;
+        } else {
+            self.remaining_quantity -= fill_quantity;
+            self.status = OrderStatus::PartiallyFilled;
+        }
+        self.updated_at = Utc::now();
+    }
+
+    /// Cancels this order
+    pub fn cancel(&mut self) {
+        self.status = OrderStatus::Cancelled;
+        self.updated_at = Utc::now();
+    }
+
+    /// Checks if this order is still active (can be matched)
+    pub fn is_active(&self) -> bool {
+        matches!(self.status, OrderStatus::Open | OrderStatus::PartiallyFilled)
+    }
 } 

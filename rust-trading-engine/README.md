@@ -1,128 +1,236 @@
-# Rust Trading Engine for Probo-like Cricket Trading
+# Rust Prediction Market Trading Engine
 
-A high-performance trading engine implemented in Rust for a cricket prediction market platform.
+A high-performance trading engine for binary prediction markets, inspired by platforms like Probo.
 
-## Project Overview
+## Features
 
-This trading engine is designed to replace the TypeScript implementation of the core trading components in a Next.js cricket trading platform similar to Probo. It delivers significantly improved performance for latency-critical operations like order matching, price discovery, and position management.
+- Binary prediction markets with Yes/No outcomes
+- Efficient order matching with BTreeMap-based order books
+- Fair FIFO-based matching that prevents self-matching
+- Real-time trade and price updates via WebSockets
+- Market resolution and settlement
+- Liquidity provision via configurable trading bots
+- Async/concurrent processing with tokio
+- PostgreSQL database persistence
 
-## Components
+## Project Structure
 
-This trading engine implements core market functionality with three main components:
-
-1. **Order Matching Engine**
-   - Efficient matching of buy and sell orders
-   - Price-time priority queue
-   - Support for limit and market orders
-
-2. **Price Discovery System**
-   - Real-time price updates based on order flow
-   - Market overround management for balanced binary markets
-   - Liquidity-sensitive price impact model
-
-3. **Position Management**
-   - Accurate position tracking for users
-   - Profit and loss calculations
-   - Risk management
-
-## Integration with Next.js Frontend
-
-This Rust engine is designed to work alongside the existing Next.js frontend through:
-
-1. REST API endpoints for orders, orderbooks, and positions
-2. WebSocket connections for real-time updates
-3. Database integration for persistence
-
-### Technical Implementation
-
-The engine exposes these key endpoints:
-
-- `POST /api/v1/orders` - Create new orders
-- `GET /api/v1/markets/{market_id}/options/{option_id}/orderbook` - Get order book
-- `GET /api/v1/users/{user_id}/positions` - Get user positions
-- WebSocket at `/ws` for real-time data
+```
+src/
+├── api/              # API layer
+│   ├── routes.rs     # HTTP endpoints
+│   └── websocket.rs  # WebSocket server for real-time updates
+├── db/               # Database layer
+│   ├── schema.rs     # Diesel ORM schema
+│   └── repository.rs # Database repository
+├── models/           # Data models
+│   ├── market.rs     # Market and order book
+│   ├── order.rs      # Orders and related enums
+│   └── trade.rs      # Trade execution records
+├── services/         # Business logic
+│   ├── bot_service.rs        # Bot strategies for liquidity
+│   ├── matching_engine.rs    # Order matching logic
+│   ├── order_service.rs      # Order management
+│   └── settlement_service.rs # Market resolution and payouts
+├── lib.rs            # Library exports
+└── main.rs           # Application entry point
+```
 
 ## Getting Started
 
 ### Prerequisites
 
-- Rust 1.70+ with Cargo
-- PostgreSQL database
+- Rust 1.65+
+- Cargo
+- PostgreSQL 12+
+- Diesel CLI (`cargo install diesel_cli --no-default-features --features postgres`)
 
-### Configuration
+### Database Setup
 
-Create a `.env` file with:
+1. Create a PostgreSQL database:
+
+```bash
+createdb prediction_engine
+```
+
+2. Create a `.env` file in the project root with:
 
 ```
-# Server configuration
-PORT=8080
-HOST=0.0.0.0
-
-# Database connection
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/trading_db
-
-# Logging
+DATABASE_URL=postgres://username:password@localhost:5432/prediction_engine
 RUST_LOG=info
 ```
 
-### Build and Run
+3. Run database migrations:
 
 ```bash
-# Build the project
+diesel migration run
+```
+
+### Building
+
+```bash
 cargo build --release
-
-# Run the server
-cargo run --release
 ```
 
-## Database Setup
+### Running
 
-The service requires a PostgreSQL database for storing orders, positions, and market data:
-
-```sql
--- Create basic database tables
-CREATE TABLE orders (
-    id UUID PRIMARY KEY,
-    user_id UUID NOT NULL,
-    market_id BIGINT NOT NULL,
-    market_option_id BIGINT NOT NULL,
-    type VARCHAR(10) NOT NULL,
-    side VARCHAR(10) NOT NULL,
-    price DECIMAL(10, 2) NOT NULL,
-    quantity DECIMAL(10, 2) NOT NULL,
-    filled_quantity DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    status VARCHAR(20) NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
-);
-
-CREATE TABLE positions (
-    id UUID PRIMARY KEY,
-    user_id UUID NOT NULL,
-    market_id BIGINT NOT NULL,
-    market_option_id BIGINT NOT NULL,
-    quantity DECIMAL(10, 2) NOT NULL,
-    average_entry_price DECIMAL(10, 2) NOT NULL,
-    realized_pnl DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    UNIQUE(user_id, market_id, market_option_id)
-);
+```bash
+RUST_LOG=info cargo run --release
 ```
 
-## Performance Benchmarks
+The server will start on port 8080 by default. You can override this with the `PORT` environment variable:
 
-When compared to the TypeScript implementation, the Rust trading engine provides:
+```bash
+PORT=9000 RUST_LOG=info cargo run --release
+```
 
-- Order matching: **~100x** faster
-- Price calculation: **~50x** faster
-- Memory usage: **~80%** reduced
-- Overall throughput: Can handle **>10,000** orders per second
+## API Usage
 
-## Integration Strategy
+### Markets
 
-See [INTEGRATION.md](./INTEGRATION.md) for details on integrating with the existing Next.js frontend.
+#### Create a new market
+
+```
+POST /api/markets
+```
+
+Request body:
+```json
+{
+  "market_id": "btc-above-50k-eoy",
+  "question": "Will BTC price be above $50k at the end of the year?",
+  "description": "Market resolves to Yes if BTC price on Coinbase is above $50,000 on December 31st 23:59:59 UTC.",
+  "close_time": "2023-12-31T23:59:59Z"
+}
+```
+
+#### Get a market by ID
+
+```
+GET /api/markets/{market_id}
+```
+
+#### Get all markets
+
+```
+GET /api/markets
+```
+
+#### Resolve a market
+
+```
+POST /api/markets/{market_id}/resolve
+```
+
+Request body:
+```json
+{
+  "market_id": "btc-above-50k-eoy",
+  "outcome": "Yes"
+}
+```
+
+### Orders
+
+#### Submit a new order
+
+```
+POST /api/orders
+```
+
+Request body:
+```json
+{
+  "user_id": "7f9c2a6b-0e1d-4e3f-8b7a-5e9c2d3f1e0a",
+  "market_id": "btc-above-50k-eoy",
+  "side": "Buy",
+  "outcome": "Yes",
+  "price": 0.65,
+  "quantity": 10
+}
+```
+
+#### Cancel an order
+
+```
+DELETE /api/orders/{order_id}
+```
+
+Request body:
+```json
+{
+  "market_id": "btc-above-50k-eoy"
+}
+```
+
+#### Get user orders
+
+```
+GET /api/orders/user/{user_id}/market/{market_id}
+```
+
+### Bots
+
+#### Start a bot for a market
+
+```
+POST /api/bots/start
+```
+
+Request body:
+```json
+{
+  "market_id": "btc-above-50k-eoy",
+  "strategy": "market_maker"
+}
+```
+
+Available strategies:
+- `market_maker`: Places orders on both sides to maintain liquidity
+- `trend_follower`: Follows market trend with small offsets
+- `noise_trader`: Places random orders around the mid price
+
+#### Stop a bot
+
+```
+POST /api/bots/stop/{market_id}
+```
+
+## WebSocket API
+
+Connect to the WebSocket endpoint:
+
+```
+ws://localhost:8080/ws
+```
+
+### Subscribing to events
+
+```json
+{
+  "action": "subscribe",
+  "markets": ["btc-above-50k-eoy"],
+  "user_id": "7f9c2a6b-0e1d-4e3f-8b7a-5e9c2d3f1e0a"
+}
+```
+
+### Unsubscribing from events
+
+```json
+{
+  "action": "unsubscribe",
+  "markets": ["btc-above-50k-eoy"],
+  "user_id": "7f9c2a6b-0e1d-4e3f-8b7a-5e9c2d3f1e0a"
+}
+```
+
+### Event Types
+
+- `Trade`: A new trade has been executed
+- `PriceUpdate`: Market price has changed
+- `MarketResolution`: A market has been resolved
+- `Payout`: User received a payout
+- `OrderUpdate`: Order status changed
 
 ## License
 

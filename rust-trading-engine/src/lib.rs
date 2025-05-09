@@ -1,7 +1,18 @@
 pub mod models;
 pub mod services;
+pub mod api;
+pub mod db;
 
-// Export only the model types, not the modules themselves
-pub use models::market::{Market, MarketOption, MarketStatus, MarketType, MarketResolution};
-pub use models::order::{Order, OrderBook, OrderCreationParams, OrderMatch, OrderSide, OrderStatus, TradeResult};
-pub use models::position::{Position, PositionDelta, PositionUpdateParams, PositionSummary};
+// Re-export commonly used db types
+pub use db::{PgPool, Repository, SqlxRepository};
+
+// Re-export model types
+pub use models::{
+    Market,
+    order::{Order, OrderSide, OrderStatus, OutcomeSide},
+    trade::Trade,
+    balance::{UserBalance, BalanceTransaction, TransactionType},
+};
+
+pub use services::{MatchingEngine, OrderService, BotService, BotStrategy, BotConfig, SettlementService, BalanceService};
+pub use api::{ApiResponse, WebSocketEvent, WebSocketServer}; 
