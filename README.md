@@ -58,7 +58,7 @@ NEXTAUTH_SECRET=your-random-secret-key
 3. Set up your environment variables as described above
 4. Run the development server:
    ```bash
-   npm run dev
+   npm run dev:next
    ```
 5. Visit http://localhost:3000 in your browser
 
